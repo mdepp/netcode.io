@@ -3,9 +3,9 @@ use std::io::Write;
 
 use byteorder::{WriteBytesExt, ReadBytesExt, LittleEndian};
 
-use common::*;
-use crypto;
-use token;
+use crate::common::*;
+use crate::crypto;
+use crate::token;
 
 const PACKET_CONNECTION: u8 = 0;
 const PACKET_CONNECTION_DENIED: u8 = 1;
@@ -15,6 +15,8 @@ const PACKET_KEEPALIVE: u8 = 4;
 const PACKET_PAYLOAD: u8 = 5;
 const PACKET_DISCONNECT: u8 = 6;
 
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(large_enum_variant))]
 pub enum Packet {
     ConnectionRequest(ConnectionRequestPacket),
     ConnectionDenied,
@@ -27,25 +29,25 @@ pub enum Packet {
 
 impl Packet {
     pub fn get_type_id(&self) -> u8 {
-        match self {
-            &Packet::ConnectionRequest(_) => PACKET_CONNECTION,
-            &Packet::ConnectionDenied => PACKET_CONNECTION_DENIED,
-            &Packet::Challenge(_) => PACKET_CHALLENGE,
-            &Packet::Response(_) => PACKET_RESPONSE,
-            &Packet::KeepAlive(_) => PACKET_KEEPALIVE,
-            &Packet::Payload(_) => PACKET_PAYLOAD,
-            &Packet::Disconnect => PACKET_DISCONNECT
+        match *self {
+            Packet::ConnectionRequest(_) => PACKET_CONNECTION,
+            Packet::ConnectionDenied => PACKET_CONNECTION_DENIED,
+            Packet::Challenge(_) => PACKET_CHALLENGE,
+            Packet::Response(_) => PACKET_RESPONSE,
+            Packet::KeepAlive(_) => PACKET_KEEPALIVE,
+            Packet::Payload(_) => PACKET_PAYLOAD,
+            Packet::Disconnect => PACKET_DISCONNECT
         }
     }
 
     fn write<W>(&self, out: &mut W) -> Result<(), io::Error> where W: io::Write {
-        match self {
-            &Packet::ConnectionRequest(ref p) => p.write(out),
-            &Packet::ConnectionDenied => Ok(()),
-            &Packet::Challenge(ref p) => p.write(out),
-            &Packet::Response(ref p) => p.write(out),
-            &Packet::KeepAlive(ref p) => p.write(out),
-            &Packet::Payload(_) | &Packet::Disconnect => Ok(())
+        match *self {
+            Packet::ConnectionRequest(ref p) => p.write(out),
+            Packet::Challenge(ref p) => p.write(out),
+            Packet::Response(ref p) => p.write(out),
+            Packet::KeepAlive(ref p) => p.write(out),
+            Packet::ConnectionDenied | Packet::Payload(_) | Packet::Disconnect => Ok(())
+
         }
     }
 }
@@ -54,13 +56,15 @@ fn decode_prefix(value: u8) -> (u8, usize) {
     ((value & 0xF) as u8, (value >> 4) as usize)
 }
 
+// TODO: fix me
+#[cfg_attr(feature="cargo-clippy", allow(cast_possible_truncation))]
 fn encode_prefix(value: u8, sequence: u64) -> u8 {
     value | ((sequence_bytes_required(sequence) as u8) << 4)
 }
 
 fn sequence_bytes_required(sequence: u64) -> usize
 {
-    let mut mask: u64 = 0xFF00000000000000;
+    let mut mask: u64 = 0xFF00_0000_0000_0000;
     for i in 0..8 {
         if (sequence & mask) != 0x00 {
             return 8 - i
@@ -73,6 +77,8 @@ fn sequence_bytes_required(sequence: u64) -> usize
 }
 
 #[derive(Debug)]
+// TODO: fix me
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub enum PacketError {
     InvalidPrivateKey,
     InvalidPacket,
@@ -81,13 +87,13 @@ pub enum PacketError {
 }
 
 impl From<io::Error> for PacketError {
-    fn from(err: io::Error) -> PacketError {
+    fn from(err: io::Error) -> Self {
         PacketError::GenericIO(err)
     }
 }
 
 impl From<crypto::EncryptError> for PacketError {
-    fn from(err: crypto::EncryptError) -> PacketError {
+    fn from(err: crypto::EncryptError) -> Self {
         PacketError::DecryptError(err)
     }
 }
@@ -113,7 +119,7 @@ fn get_additional_data(prefix: u8, protocol_id: u64) -> Result<[u8; NETCODE_VERS
     {
         let mut writer = io::Cursor::new(&mut buffer[..]);
 
-        writer.write(&NETCODE_VERSION_STRING[..])?;
+        writer.write_all(&NETCODE_VERSION_STRING[..])?;
         writer.write_u64::<LittleEndian>(protocol_id)?;
         writer.write_u8(prefix)?;
     }
@@ -123,95 +129,101 @@ fn get_additional_data(prefix: u8, protocol_id: u64) -> Result<[u8; NETCODE_VERS
 
 pub fn decode(data: &[u8], protocol_id: u64, private_key: Option<&[u8; NETCODE_KEY_BYTES]>, out: &mut [u8; NETCODE_MAX_PAYLOAD_SIZE])
         -> Result<(u64, Packet), PacketError> {
-    let mut source = &mut io::Cursor::new(data);
+    let source = &mut io::Cursor::new(data);
     let prefix_byte = source.read_u8()?;
     let (ty, sequence_len) = decode_prefix(prefix_byte);
 
     if ty == PACKET_CONNECTION {
         Ok((0, Packet::ConnectionRequest(ConnectionRequestPacket::read(source)?)))
+    } else if let Some(private_key) = private_key {
+        //Sequence length is variable on the wire so we have to serialize only
+        //the number of bytes we were told exist.
+        let sequence = read_sequence(source, sequence_len)?;
+
+        // TODO: fix me
+        #[cfg_attr(feature="cargo-clippy", allow(cast_possible_truncation))]
+        let payload = &data[source.position() as usize..];
+        let additional_data = get_additional_data(prefix_byte, protocol_id)?;
+
+        let decoded_len = crypto::decode(out, payload, Some(&additional_data[..]), sequence, private_key)?;
+
+        let source_data = &mut io::Cursor::new(&out[..decoded_len]);
+
+        let packet = match ty {
+            PACKET_CONNECTION_DENIED => Ok(Packet::ConnectionDenied),
+            PACKET_CHALLENGE => Ok(Packet::Challenge(ChallengePacket::read(source_data)?)),
+            PACKET_RESPONSE => Ok(Packet::Response(ResponsePacket::read(source_data)?)),
+            PACKET_KEEPALIVE => Ok(Packet::KeepAlive(KeepAlivePacket::read(source_data)?)),
+            PACKET_PAYLOAD => {
+                Ok(Packet::Payload(decoded_len))
+            },
+            PACKET_DISCONNECT => Ok(Packet::Disconnect),
+            PACKET_CONNECTION | _ => Err(PacketError::InvalidPacket)
+        };
+
+        packet.map(|p| (sequence, p))
     } else {
-        if let Some(private_key) = private_key {
-            //Sequence length is variable on the wire so we have to serialize only
-            //the number of bytes we were told exist.
-            let sequence = read_sequence(source, sequence_len)?;
-
-            let payload = &data[source.position() as usize..];
-            let additional_data = get_additional_data(prefix_byte, protocol_id)?;
-
-            let decoded_len = crypto::decode(out, payload, Some(&additional_data[..]), sequence, private_key)?;
-
-            let mut source_data = &mut io::Cursor::new(&out[..decoded_len]);
-
-            let packet = match ty {
-                PACKET_CONNECTION_DENIED => Ok(Packet::ConnectionDenied),
-                PACKET_CHALLENGE => Ok(Packet::Challenge(ChallengePacket::read(source_data)?)),
-                PACKET_RESPONSE => Ok(Packet::Response(ResponsePacket::read(source_data)?)),
-                PACKET_KEEPALIVE => Ok(Packet::KeepAlive(KeepAlivePacket::read(source_data)?)),
-                PACKET_PAYLOAD => {
-                    Ok(Packet::Payload(decoded_len))
-                },
-                PACKET_DISCONNECT => Ok(Packet::Disconnect),
-                PACKET_CONNECTION | _ => Err(PacketError::InvalidPacket)
-            };
-
-            packet.map(|p| (sequence, p))
-        } else {
-            Err(PacketError::InvalidPrivateKey)
-        }
+        Err(PacketError::InvalidPrivateKey)
     }
 }
 
 pub fn encode(out: &mut [u8], protocol_id: u64, packet: &Packet, crypt_info: Option<(u64, &[u8; NETCODE_KEY_BYTES])>, payload: Option<&[u8]>)
         -> Result<usize, PacketError> {
-    if let &Packet::ConnectionRequest(ref req) = packet {
+    if let Packet::ConnectionRequest(ref req) = *packet {
         let mut writer = io::Cursor::new(&mut out[..]);
 
         //First byte is always id + sequence
-        writer.write_u8(encode_prefix(packet.get_type_id(), 0))?;
+        writer.write_u8(encode_prefix(packet.get_type_id() as u8, 0))?;
         req.write(&mut writer)?;
 
+        // TODO: fix me
+        #[cfg_attr(feature="cargo-clippy", allow(cast_possible_truncation))]
         Ok(writer.position() as usize)
+    } else if let Some((sequence, private_key)) = crypt_info {
+        let (prefix_byte, offset) = {
+            let write = &mut io::Cursor::new(&mut out[..]);
+
+            //First byte is always id + sequence
+            let prefix_byte = encode_prefix(packet.get_type_id() as u8, sequence);
+            write.write_u8(prefix_byte)?;
+            write_sequence(write, sequence)?;
+
+            (prefix_byte, write.position())
+        };
+
+        let mut scratch = [0; NETCODE_MAX_PACKET_SIZE];
+        let scratch_written = {
+            let mut scratch_write = io::Cursor::new(&mut scratch[..]);
+            packet.write(&mut scratch_write)?;
+
+            if let Some(payload) = payload {
+                scratch_write.write_all(payload)?;
+            }
+
+            scratch_write.position()
+        };
+
+        let additional_data = get_additional_data(prefix_byte, protocol_id)?;
+
+        // TODO: fix me
+        #[cfg_attr(feature="cargo-clippy", allow(cast_possible_truncation))]
+        let crypt_write = crypto::encode(
+            &mut out[offset as usize..],
+            &scratch[..scratch_written as usize],
+            Some(&additional_data[..]),
+            sequence,
+            private_key)?;
+
+        // TODO: fix me
+        #[cfg_attr(feature="cargo-clippy", allow(cast_possible_truncation))]
+        Ok(offset as usize + crypt_write)
     } else {
-        if let Some((sequence, private_key)) = crypt_info {
-            let (prefix_byte, offset) = {
-                let mut write = &mut io::Cursor::new(&mut out[..]);
-
-                //First byte is always id + sequence
-                let prefix_byte = encode_prefix(packet.get_type_id(), sequence);
-                write.write_u8(prefix_byte)?;
-                write_sequence(write, sequence)?;
-
-                (prefix_byte, write.position())
-            };
-
-            let mut scratch = [0; NETCODE_MAX_PACKET_SIZE];
-            let scratch_written = {
-                let mut scratch_write = io::Cursor::new(&mut scratch[..]);
-                packet.write(&mut scratch_write)?;
-
-                if let Some(payload) = payload {
-                    scratch_write.write(payload)?;
-                }
-
-                scratch_write.position()
-            };
-
-            let additional_data = get_additional_data(prefix_byte, protocol_id)?;
-
-            let crypt_write = crypto::encode(
-                &mut out[offset as usize..],
-                &scratch[..scratch_written as usize],
-                Some(&additional_data[..]),
-                sequence,
-                private_key)?;
-
-            Ok(offset as usize + crypt_write)
-        } else {
-            Err(PacketError::InvalidPrivateKey)
-        }
+        Err(PacketError::InvalidPrivateKey)
     }
 }
 
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub struct ConnectionRequestPacket {
     pub version: [u8; NETCODE_VERSION_LEN],
     pub protocol_id: u64,
@@ -221,9 +233,9 @@ pub struct ConnectionRequestPacket {
 }
 
 impl ConnectionRequestPacket {
-    pub fn from_token(token: &token::ConnectToken) -> ConnectionRequestPacket {
-        ConnectionRequestPacket {
-            version: NETCODE_VERSION_STRING.clone(),
+    pub fn from_token(token: &token::ConnectToken) -> Self {
+        Self {
+            version: *NETCODE_VERSION_STRING,
             protocol_id: token.protocol,
             token_expire: token.expire_utc,
             sequence: token.sequence,
@@ -231,7 +243,7 @@ impl ConnectionRequestPacket {
         }
     }
 
-    pub fn read<R>(source: &mut R) -> Result<ConnectionRequestPacket, io::Error> where R: io::Read {
+    pub fn read<R>(source: &mut R) -> Result<Self, io::Error> where R: io::Read {
         let mut version = [0; NETCODE_VERSION_LEN];
         source.read_exact(&mut version[..])?;
 
@@ -242,21 +254,21 @@ impl ConnectionRequestPacket {
         let mut private_data = [0; NETCODE_CONNECT_TOKEN_PRIVATE_BYTES];
         source.read_exact(&mut private_data[..])?;
 
-        Ok(ConnectionRequestPacket {
-            version: version,
-            protocol_id: protocol_id,
-            token_expire: token_expire,
-            sequence: sequence,
-            private_data: private_data
+        Ok(Self {
+            version,
+            protocol_id,
+            token_expire,
+            sequence,
+            private_data
         })
     }
 
     pub fn write<W>(&self, out: &mut W) -> Result<(), io::Error> where W: io::Write {
-        out.write(&self.version)?;
+        out.write_all(&self.version)?;
         out.write_u64::<LittleEndian>(self.protocol_id)?;
         out.write_u64::<LittleEndian>(self.token_expire)?;
         out.write_u64::<LittleEndian>(self.sequence)?;
-        out.write(&self.private_data)?;
+        out.write_all(&self.private_data)?;
 
         Ok(())
     }
@@ -268,8 +280,8 @@ pub struct ChallengeToken {
 }
 
 impl Clone for ChallengeToken {
-    fn clone(&self) -> ChallengeToken {
-        ChallengeToken {
+    fn clone(&self) -> Self {
+        Self {
             client_id: self.client_id,
             user_data: self.user_data
         }
@@ -279,35 +291,37 @@ impl Clone for ChallengeToken {
 impl ChallengeToken {
     pub fn generate(client_id: u64,
             connect_user_data: &[u8; NETCODE_USER_DATA_BYTES])
-                -> ChallengeToken {
+                -> Self {
 
         let mut user_data = [0; NETCODE_USER_DATA_BYTES];
         user_data.copy_from_slice(connect_user_data);
 
-        ChallengeToken {
-            client_id: client_id,
-            user_data: user_data
+        Self {
+            client_id,
+            user_data
         }
     }
 
-    pub fn read<R>(source: &mut R) -> Result<ChallengeToken, io::Error> where R: io::Read {
+    pub fn read<R>(source: &mut R) -> Result<Self, io::Error> where R: io::Read {
         let client_id = source.read_u64::<LittleEndian>()?;
         let mut user_data = [0; NETCODE_USER_DATA_BYTES];
         source.read_exact(&mut user_data)?;
 
-        Ok(ChallengeToken {
-            client_id: client_id,
-            user_data: user_data
+        Ok(Self {
+            client_id,
+            user_data
         })
     }
 
     pub fn write<W>(&self, out: &mut W) -> Result<(), io::Error> where W: io::Write {
         out.write_u64::<LittleEndian>(self.client_id)?;
-        out.write(&self.user_data)?;
+        out.write_all(&self.user_data)?;
 
         Ok(())
     }
 }
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 
 pub struct ChallengePacket {
     pub token_sequence: u64,
@@ -321,13 +335,13 @@ pub enum ChallengeEncodeError {
 }
 
 impl From<io::Error> for ChallengeEncodeError {
-    fn from(err: io::Error) -> ChallengeEncodeError {
+    fn from(err: io::Error) -> Self {
         ChallengeEncodeError::Io(err)
     }
 }
 
 impl From<crypto::EncryptError> for ChallengeEncodeError {
-    fn from(err: crypto::EncryptError) -> ChallengeEncodeError {
+    fn from(err: crypto::EncryptError) -> Self {
         ChallengeEncodeError::Encrypt(err)
     }
 }
@@ -337,7 +351,7 @@ impl ChallengePacket {
             connect_user_data: &[u8; NETCODE_USER_DATA_BYTES],
             challenge_sequence: u64,
             challenge_key: &[u8; NETCODE_KEY_BYTES])
-            -> Result<ChallengePacket, ChallengeEncodeError> {
+            -> Result<Self, ChallengeEncodeError> {
         let token = ChallengeToken::generate(client_id, connect_user_data);
         let mut scratch = [0; NETCODE_CHALLENGE_TOKEN_BYTES - NETCODE_MAC_BYTES];
         token.write(&mut io::Cursor::new(&mut scratch[..]))?;
@@ -345,9 +359,9 @@ impl ChallengePacket {
         let mut token_data = [0; NETCODE_CHALLENGE_TOKEN_BYTES];
         crypto::encode(&mut token_data[..], &scratch[..], None, challenge_sequence, challenge_key)?;
 
-        Ok(ChallengePacket {
+        Ok(Self {
             token_sequence: challenge_sequence,
-            token_data: token_data
+            token_data
         })
     }
 
@@ -359,39 +373,41 @@ impl ChallengePacket {
         ChallengeToken::read(&mut io::Cursor::new(&decoded[..])).map_err(|e| e.into())
     }
 
-    pub fn read<R>(source: &mut R) -> Result<ChallengePacket, io::Error> where R: io::Read {
+    pub fn read<R>(source: &mut R) -> Result<Self, io::Error> where R: io::Read {
         let token_sequence = source.read_u64::<LittleEndian>()?;
         let mut token_data = [0; NETCODE_CHALLENGE_TOKEN_BYTES];
         source.read_exact(&mut token_data)?;
 
-        Ok(ChallengePacket {
-            token_sequence: token_sequence,
-            token_data: token_data
+        Ok(Self {
+            token_sequence,
+            token_data
         })
     }
 
     pub fn write<W>(&self, out: &mut W) -> Result<(), io::Error> where W: io::Write {
         out.write_u64::<LittleEndian>(self.token_sequence)?;
-        out.write(&self.token_data)?;
+        out.write_all(&self.token_data)?;
 
         Ok(())
     }
 }
 
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub struct ResponsePacket {
     pub token_sequence: u64,
     pub token_data: [u8; NETCODE_CHALLENGE_TOKEN_BYTES]
 }
 
 impl ResponsePacket {
-    pub fn read<R>(source: &mut R) -> Result<ResponsePacket, io::Error> where R: io::Read {
+    pub fn read<R>(source: &mut R) -> Result<Self, io::Error> where R: io::Read {
         let token_sequence = source.read_u64::<LittleEndian>()?;
         let mut token_data = [0; NETCODE_CHALLENGE_TOKEN_BYTES];
         source.read_exact(&mut token_data)?;
 
-        Ok(ResponsePacket {
-            token_sequence: token_sequence,
-            token_data: token_data
+        Ok(Self {
+            token_sequence,
+            token_data
         })
     }
 
@@ -404,20 +420,22 @@ impl ResponsePacket {
 
     pub fn write<W>(&self, out: &mut W) -> Result<(), io::Error> where W: io::Write {
         out.write_u64::<LittleEndian>(self.token_sequence)?;
-        out.write(&self.token_data)?;
+        out.write_all(&self.token_data)?;
 
         Ok(())
     }
 }
 
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub struct KeepAlivePacket {
     pub client_idx: i32,
     pub max_clients: i32
 }
 
 impl KeepAlivePacket {
-    pub fn read<R>(source: &mut R) -> Result<KeepAlivePacket, io::Error> where R: io::Read {
-        Ok(KeepAlivePacket {
+    pub fn read<R>(source: &mut R) -> Result<Self, io::Error> where R: io::Read {
+        Ok(Self {
             client_idx: source.read_i32::<LittleEndian>()?,
             max_clients: source.read_i32::<LittleEndian>()?
         })
@@ -450,21 +468,22 @@ fn test_sequence() {
 }
 
 #[cfg(test)]
+#[allow(unused_variables)]
 fn test_encode_decode<V>(
         packet: Packet,
         payload: Option<&[u8]>,
-        mut private_key: Option<[u8; NETCODE_KEY_BYTES]>,
+        private_key: Option<[u8; NETCODE_KEY_BYTES]>,
         verify: V)
             where V: Fn(Packet)
         {
-    let mut sequence = if let Packet::ConnectionRequest(_) = packet {
+    let sequence = if let Packet::ConnectionRequest(_) = packet {
         0x0
     } else {
         0xCCDD
     };
 
     let protocol_id = 0xFFCC;
-    let mut pkey = crypto::generate_key();
+    let pkey = crypto::generate_key();
 
     let mut scratch = [0; NETCODE_MAX_PACKET_SIZE];
     let mut out_packet = [0; NETCODE_MAX_PAYLOAD_SIZE];
@@ -520,7 +539,7 @@ fn test_encode_decode<V>(
 
 #[test]
 fn test_conn_packet() {
-    use token;
+    use crate::token;
     use std::net::SocketAddr;
     use std::str::FromStr;
 
@@ -538,10 +557,10 @@ fn test_conn_packet() {
                         None).unwrap();
 
     let packet = Packet::ConnectionRequest(ConnectionRequestPacket {
+        protocol_id,
+        sequence,
         version: NETCODE_VERSION_STRING.clone(),
-        protocol_id: protocol_id,
         token_expire: token.expire_utc,
-        sequence: sequence,
         private_data: token.private_data
     });
 
@@ -592,8 +611,8 @@ fn test_challenge_packet() {
 
     test_encode_decode(
         Packet::Challenge(ChallengePacket {
-            token_sequence: token_sequence,
-            token_data: token_data
+            token_sequence,
+            token_data
         }),
         None,
         None,
@@ -621,8 +640,8 @@ fn test_response_packet() {
 
     test_encode_decode(
         Packet::Response(ResponsePacket {
-            token_sequence: token_sequence,
-            token_data: token_data
+            token_sequence,
+            token_data
         }),
         None,
         None,
@@ -647,8 +666,8 @@ fn test_keep_alive_packet() {
 
     test_encode_decode(
         Packet::KeepAlive(KeepAlivePacket {
-            client_idx: client_idx,
-            max_clients: max_clients
+            client_idx,
+            max_clients
         }),
         None,
         None,
@@ -707,9 +726,9 @@ fn test_decode_challenge_token() {
 
    unsafe {
         #[allow(unused_variables)]
-        let lock = ::common::test::FFI_LOCK.lock().unwrap();
+        let lock = crate::common::test::FFI_LOCK.lock().unwrap();
 
-        use capi;
+        use crate::capi;
 
         let mut capi_scratch = [0; NETCODE_CHALLENGE_TOKEN_BYTES];
         capi_scratch.copy_from_slice(&challenge_packet.token_data);

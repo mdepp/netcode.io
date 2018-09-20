@@ -1,9 +1,9 @@
-use common::*;
-use error::*;
-use channel::{self, Channel};
-use packet;
-use socket::SocketProvider;
-use token::ConnectToken;
+use crate::common::*;
+use crate::error::*;
+use crate::channel::{self, Channel};
+use crate::packet;
+use crate::socket::SocketProvider;
+use crate::token::ConnectToken;
 
 use std::net::{SocketAddr, UdpSocket};
 use std::io;
@@ -31,28 +31,34 @@ pub enum State {
     Connected
 }
 
+// TODO: need to find out why these are 64
+#[cfg_attr(feature="cargo-clippy", allow(large_enum_variant))]
 enum InternalState {
     Connecting(usize, ConnectSequence),
     Connected,
     Disconnected
 }
 
+// TODO: need to find out why these are 64
+#[cfg_attr(feature="cargo-clippy", allow(large_enum_variant))]
 enum ConnectSequence {
     SendingToken,
     SendingChallenge(u64, [u8; NETCODE_CHALLENGE_TOKEN_BYTES])
 }
 
 impl Clone for ConnectSequence {
-    fn clone(&self) -> ConnectSequence {
+    fn clone(&self) -> Self {
         match self {
-            &ConnectSequence::SendingToken => ConnectSequence::SendingToken,
-            &ConnectSequence::SendingChallenge(seq, ref token) => ConnectSequence::SendingChallenge(seq, *token.clone())
+            ConnectSequence::SendingToken => ConnectSequence::SendingToken,
+            ConnectSequence::SendingChallenge(seq, ref token) => ConnectSequence::SendingChallenge(*seq, *token)
         }
     }
 }
 
 /// Describes event the server receives when calling `next_event(..)`.
 #[derive(Clone, Debug)]
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub enum ClientEvent {
     /// Client state has changed to `State`.
     NewState(State),
@@ -79,6 +85,8 @@ struct ClientData<I,S> where I: SocketProvider<I,S> {
 }
 
 /// UDP based netcode client.
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub type UdpClient = Client<UdpSocket, ()>;
 
 impl<I,S> ClientData<I,S> where I: SocketProvider<I,S> {
@@ -94,19 +102,16 @@ impl<I,S> ClientData<I,S> where I: SocketProvider<I,S> {
     }
 
     fn connect_channel(&mut self, idx: usize) {
-        match self.token.hosts.get().skip(idx).next() {
-            Some(ref addr) => {
-                trace!("Created new channel to {:?}", addr);
-                self.channel = Channel::new(
-                                &self.token.client_to_server_key,
-                                &self.token.server_to_client_key,
-                                addr,
-                                self.token.protocol,
-                                0,
-                                0,
-                                self.time)
-            },
-            None => ()
+        if let Some(ref addr) = self.token.hosts.get().nth(idx) {
+            trace!("Created new channel to {:?}", addr);
+            self.channel = Channel::new(
+                            &self.token.client_to_server_key,
+                            &self.token.server_to_client_key,
+                            addr,
+                            self.token.protocol,
+                            0,
+                            0,
+                            self.time);
         }
     }
 
@@ -142,8 +147,8 @@ impl<I,S> ClientData<I,S> where I: SocketProvider<I,S> {
 
     fn handle_response(&mut self, packet: &packet::Packet, state: &ConnectSequence, new_state: &mut Option<InternalState>, idx: usize) -> Result<Option<ClientEvent>, UpdateError> {
         match packet {
-            &packet::Packet::Challenge(ref challenge) => match state {
-                &ConnectSequence::SendingToken => {
+            packet::Packet::Challenge(ref challenge) => match state {
+                ConnectSequence::SendingToken => {
                     trace!("Got challenge token, moving to response");
 
                     *new_state = Some(InternalState::Connecting(idx, ConnectSequence::SendingChallenge(challenge.token_sequence, challenge.token_data)));
@@ -152,17 +157,17 @@ impl<I,S> ClientData<I,S> where I: SocketProvider<I,S> {
 
                     Ok(Some(ClientEvent::NewState(self.ext_state.clone())))
                 }
-                &ConnectSequence::SendingChallenge(_,_) => {
+                ConnectSequence::SendingChallenge(_,_) => {
                     trace!("Got Challenge token when sending challenge, ignoring");
                     Ok(None)
                 }
             },
-            &packet::Packet::KeepAlive(_) => match state {
-                &ConnectSequence::SendingToken => {
+            packet::Packet::KeepAlive(_) => match state {
+                ConnectSequence::SendingToken => {
                     trace!("Got keep-alive while sending token, ignoring");
                     Ok(None)
                 }
-                &ConnectSequence::SendingChallenge(_,_) => {
+                ConnectSequence::SendingChallenge(_,_) => {
                     trace!("Got keep-alive while sending challenge, connection established");
                     *new_state = Some(InternalState::Connected);
                     self.ext_state = State::Connected;
@@ -186,7 +191,7 @@ impl<I,S> ClientData<I,S> where I: SocketProvider<I,S> {
     fn send_challenge_token(&mut self, sequence: u64, token: &[u8; NETCODE_CHALLENGE_TOKEN_BYTES]) -> Result<usize, SendError> {
         let packet = packet::ResponsePacket {
             token_sequence: sequence,
-            token_data: *token.clone()
+            token_data: *token
         };
 
         self.channel.send(self.time, &packet::Packet::Response(packet), None, &mut self.socket)
@@ -195,11 +200,11 @@ impl<I,S> ClientData<I,S> where I: SocketProvider<I,S> {
 
 impl<I,S> Client<I,S> where I: SocketProvider<I,S> {
     /// Constructs a new client from an existing `ConnectToken`.
-    pub fn new(token: &ConnectToken) -> Result<Client<I,S>, SendError> {
+    pub fn new(token: &ConnectToken) -> Result<Self, SendError> {
         Self::new_with_state(token, I::new_state())
     }
 
-    fn new_with_state(token: &ConnectToken, mut socket_state: S) -> Result<Client<I,S>, SendError> {
+    fn new_with_state(token: &ConnectToken, mut socket_state: S) -> Result<Self, SendError> {
         use std::str::FromStr;
 
         let local_addr = SocketAddr::from_str("127.0.0.1:0").unwrap();
@@ -217,19 +222,19 @@ impl<I,S> Client<I,S> where I: SocketProvider<I,S> {
             0.0);
 
         let mut data = ClientData {
+                channel,
+                socket,
+                socket_state,
                 time: 0.0,
                 ext_state: State::SendingConnectionRequest,
-                channel: channel,
-                socket: socket,
-                socket_state: socket_state,
                 token: token.clone()
             };
 
         data.begin_host_connect(0)?;
 
-        Ok(Client {
+        Ok(Self {
             state: InternalState::Connecting(0, ConnectSequence::SendingToken),
-            data: data
+            data
         })
     }
 
@@ -247,7 +252,7 @@ impl<I,S> Client<I,S> where I: SocketProvider<I,S> {
         let socket_result = match self.data.socket.recv_from(&mut scratch[..]) {
             Ok((len, addr)) => {
                 if addr == *self.data.channel.get_addr() {
-                    self.data.channel.recv(self.data.time, &scratch[..len], payload).map(|p| Some(p))?
+                    self.data.channel.recv(self.data.time, &scratch[..len], payload).map(Some)?
                 } else {
                     trace!("Discarded packet from unknown host {:?}", addr);
                     None
@@ -259,10 +264,10 @@ impl<I,S> Client<I,S> where I: SocketProvider<I,S> {
 
         //If we have any socket data process that first
         let socket_process = if let Some(packet) = socket_result {
-            match &mut self.state {
-                &mut InternalState::Connecting(idx, ref req) => self.data.handle_response(&packet, req, &mut new_state, idx),
-                &mut InternalState::Connected => self.data.handle_payload(&packet, &mut new_state),
-                &mut InternalState::Disconnected => Ok(None)
+            match self.state {
+                InternalState::Connecting(idx, ref req) => self.data.handle_response(&packet, req, &mut new_state, idx),
+                InternalState::Connected => self.data.handle_payload(&packet, &mut new_state),
+                InternalState::Disconnected => Ok(None)
             }
         } else {
             Ok(None)
@@ -271,8 +276,8 @@ impl<I,S> Client<I,S> where I: SocketProvider<I,S> {
         let result = match socket_process {
             //If we didn't get a packet, see if there's some upkeep to do
             Ok(None) => {
-                match &mut self.state {
-                    &mut InternalState::Connecting(mut idx, ref req) => {
+                match self.state {
+                    InternalState::Connecting(mut idx, ref req) => {
                             match self.data.update_channel(false)? {
                                 channel::UpdateResult::Expired => {
                                     idx += 1;
@@ -288,14 +293,14 @@ impl<I,S> Client<I,S> where I: SocketProvider<I,S> {
                                     }
                                 },
                                 channel::UpdateResult::SentKeepAlive => {
-                                    let send = match req {
-                                        &ConnectSequence::SendingToken => {
+                                    let send = match *req {
+                                        ConnectSequence::SendingToken => {
                                             trace!("Sending connect token");
                                             self.data.send_connect_token()
                                         },
-                                        &ConnectSequence::SendingChallenge(seq, ref token) => {
+                                        ConnectSequence::SendingChallenge(sequence, ref token) => {
                                             trace!("Sending challenge token");
-                                            self.data.send_challenge_token(seq, token)
+                                            self.data.send_challenge_token(sequence, token)
                                         }
                                     };
 
@@ -304,7 +309,7 @@ impl<I,S> Client<I,S> where I: SocketProvider<I,S> {
                                 channel::UpdateResult::Noop => Ok(None)
                             }
                     },
-                    &mut InternalState::Connected => {
+                    InternalState::Connected => {
                         match self.data.update_channel(true)? {
                             channel::UpdateResult::Expired => self.data.disconnect(&mut new_state),
                             channel::UpdateResult::SentKeepAlive => {
@@ -314,7 +319,7 @@ impl<I,S> Client<I,S> where I: SocketProvider<I,S> {
                             channel::UpdateResult::Noop => Ok(None)
                         }
                     },
-                    &mut InternalState::Disconnected => Ok(Some(ClientEvent::NewState(State::Disconnected)))
+                    InternalState::Disconnected => Ok(Some(ClientEvent::NewState(State::Disconnected)))
                 }
             },
             r => r
@@ -334,9 +339,8 @@ impl<I,S> Client<I,S> where I: SocketProvider<I,S> {
             _ => ()
         }
 
-        match self.state {
-            InternalState::Disconnected => return Err(SendError::Disconnected),
-            _ => ()
+        if let InternalState::Disconnected = self.state {
+            return Err(SendError::Disconnected)
         }
 
         self.data.channel.send(self.data.time, &packet::Packet::Payload(payload.len()), Some(payload), &mut self.data.socket)
@@ -368,9 +372,9 @@ impl<I,S> Client<I,S> where I: SocketProvider<I,S> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use server::*;
-    use token;
-    use crypto;
+    use crate::server::*;
+    use crate::token;
+    use crate::crypto;
     use std::time::Duration;
 
     const PROTOCOL_ID: u64 = 0xFFCC;
@@ -390,7 +394,7 @@ mod test {
 
         LogBuilder::new().filter(None, LogLevelFilter::Trace).init().unwrap();
 
-        use capi::*;
+        use crate::capi::*;
         unsafe {
             netcode_log_level(NETCODE_LOG_LEVEL_DEBUG as i32);
         }
@@ -415,8 +419,8 @@ mod test {
             client.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
 
             TestHarness {
-                server: server,
-                client: client
+                server,
+                client
             }
         }
 

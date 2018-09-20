@@ -5,16 +5,16 @@ use std::io;
 #[cfg(test)]
 use std::time::Duration;
 
-use common::*;
-use packet;
-use token;
-use crypto;
+use crate::common::*;
+use crate::packet;
+use crate::token;
+use crate::crypto;
 
 mod connection;
-use server::connection::*;
-use socket::*;
-use error::*;
-use channel::{self, Channel};
+use crate::server::connection::*;
+use crate::socket::*;
+use crate::error::*;
+use crate::channel::{self, Channel};
 
 /// Errors from creating a server.
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub enum CreateError {
 }
 
 impl From<io::Error> for CreateError {
-    fn from(err: io::Error) -> CreateError {
+    fn from(err: io::Error) -> Self {
         CreateError::GenericIo(err)
     }
 }
@@ -37,6 +37,8 @@ pub type ClientId = u64;
 
 /// Describes event the server receives when calling `next_event(..)`.
 #[derive(Debug)]
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub enum ServerEvent {
     /// A client has connected, contains a reference to the client that was just created. `out_packet` contains private user data from token.
     ClientConnect(ClientId),
@@ -55,6 +57,8 @@ pub enum ServerEvent {
 }
 
 /// UDP based netcode server.
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub type UdpServer = Server<UdpSocket,()>;
 
 type ClientVec = Vec<Option<Connection>>;
@@ -129,7 +133,7 @@ enum TickResult {
 impl<I,S> Server<I,S> where I: SocketProvider<I,S> {
     /// Constructs a new Server bound to `local_addr` with `max_clients` and supplied `private_key` for authentication.
     pub fn new<A>(local_addr: A, max_clients: usize, protocol_id: u64, private_key: &[u8; NETCODE_KEY_BYTES])
-            -> Result<Server<I,S>, CreateError>
+            -> Result<Self, CreateError>
             where A: ToSocketAddrs {
         let bind_addr = local_addr.to_socket_addrs().unwrap().next().unwrap();
         let mut socket_state = I::new_state();
@@ -145,13 +149,13 @@ impl<I,S> Server<I,S> where I: SocketProvider<I,S> {
 
                 trace!("Started server on {:?}", s.local_addr().unwrap());
 
-                Ok(Server {
-                    clients: clients,
+                Ok(Self {
+                    clients,
                     internal: ServerInternal {
-                        socket_state: socket_state,
+                        socket_state,
+                        protocol_id,
                         listen_socket: s,
                         listen_addr: bind_addr,
-                        protocol_id: protocol_id,
                         connect_key: key_copy,
                         time: 0.0,
                         challenge_sequence: 0,
@@ -198,7 +202,7 @@ impl<I,S> Server<I,S> where I: SocketProvider<I,S> {
 
     /// Sends a packet to `client_id` specified.
     pub fn send(&mut self, client_id: ClientId, packet: &[u8]) -> Result<usize, SendError> {
-        if packet.len() == 0 || packet.len() > NETCODE_MAX_PAYLOAD_SIZE {
+        if packet.is_empty() || packet.len() > NETCODE_MAX_PAYLOAD_SIZE {
             return Err(SendError::PacketSize)
         }
 
@@ -223,6 +227,8 @@ impl<I,S> Server<I,S> where I: SocketProvider<I,S> {
             return Err(UpdateError::PacketBufferTooSmall)
         }
 
+        // TODO: restructure
+        #[cfg_attr(feature="cargo-clippy", allow(never_loop))]
         loop {
             let mut scratch = [0; NETCODE_MAX_PACKET_SIZE];
             let result = match self.internal.listen_socket.recv_from(&mut scratch) {
@@ -316,9 +322,9 @@ impl<I,S> Server<I,S> where I: SocketProvider<I,S> {
         result.unwrap_or_else(|| self.internal.handle_new_client(addr, data, payload, &mut self.clients))
     }
 
-    fn find_client_by_id<'a>(clients: &'a mut ClientVec, id: ClientId) -> Option<&'a mut Connection> {
+    fn find_client_by_id(clients: &mut ClientVec, id: ClientId) -> Option<&mut Connection> {
         clients.iter_mut().map(|c| c.as_mut()).find(|c| {
-                if let &Some(ref c) = c {
+                if let Some(ref c) = c {
                     c.client_id == id
                 } else {
                     false
@@ -329,7 +335,7 @@ impl<I,S> Server<I,S> where I: SocketProvider<I,S> {
 
     fn find_client_by_addr<'a>(clients: &'a mut ClientVec, addr: &SocketAddr) -> Option<&'a mut Connection> {
         clients.iter_mut().map(|c| c.as_mut()).find(|c| {
-                if let &Some(ref c) = c {
+                if let Some(ref c) = c {
                     c.channel.get_addr() == addr
                 } else {
                     false
@@ -367,26 +373,23 @@ impl<I,S> ServerInternal<I,S> where I: SocketProvider<I,S> {
 
             existing_client_result.unwrap_or_else(|| {
                 //Find open index
-                match clients.iter().position(|v| v.is_none()) {
-                    Some(idx) => {
-                        let mut conn = Connection {
-                            client_id: private_data.client_id,
-                            state: ConnectionState::PendingResponse,
-                            channel: Channel::new(&private_data.server_to_client_key, &private_data.client_to_server_key, addr, self.protocol_id, idx, clients.len(), self.time)
-                        };
+                if let Some(idx) = clients.iter().position(|v| v.is_none()) {
+                    let mut conn = Connection {
+                        client_id: private_data.client_id,
+                        state: ConnectionState::PendingResponse,
+                        channel: Channel::new(&private_data.server_to_client_key, &private_data.client_to_server_key, addr, self.protocol_id, idx, clients.len(), self.time)
+                    };
 
-                        self.send_client_challenge(&mut conn, private_data)?;
+                    self.send_client_challenge(&mut conn, private_data)?;
 
-                        trace!("Accepted connection {:?}", addr);
-                        clients[idx] = Some(conn);
+                    trace!("Accepted connection {:?}", addr);
+                    clients[idx] = Some(conn);
 
-                        Ok(None)
-                    },
-                    None => {
-                        self.send_denied_packet(&addr, &private_data.server_to_client_key)?;
-                        trace!("Tried to accept new client but max clients connected: {}", clients.len());
-                        return Ok(Some(ServerEvent::ClientSlotFull))
-                    }
+                    Ok(None)
+                } else {
+                    self.send_denied_packet(&addr, &private_data.server_to_client_key)?;
+                    trace!("Tried to accept new client but max clients connected: {}", clients.len());
+                    Ok(Some(ServerEvent::ClientSlotFull))
                 }
             })
         } else {
@@ -443,11 +446,11 @@ impl<I,S> ServerInternal<I,S> where I: SocketProvider<I,S> {
                     thost == self.listen_addr || (self.listen_addr.port() == 0 && thost.ip() == self.listen_addr.ip())
                 });
 
-            if !has_host {
+            if has_host {
+                Some(v)
+            } else {
                 info!("Client connected but didn't contain host's address.");
                 None
-            } else {
-                Some(v)
             }
         } else {
             info!("Unable to decode connection token");
@@ -464,8 +467,8 @@ impl<I,S> ServerInternal<I,S> where I: SocketProvider<I,S> {
                         trace!("Failed to hear from client {}, timed out", client.client_id);
                         TickResult::StateChange(ConnectionState::TimedOut)
                     },
-                    channel::UpdateResult::SentKeepAlive => TickResult::Noop,
-                    channel::UpdateResult::Noop => TickResult::Noop
+                    channel::UpdateResult::SentKeepAlive |
+                    channel::UpdateResult::Noop => TickResult::Noop,
                 }
             },
             ConnectionState::Idle => {
@@ -519,7 +522,7 @@ impl<I,S> ServerInternal<I,S> where I: SocketProvider<I,S> {
             packet: &[u8],
             out_packet: &mut [u8; NETCODE_MAX_PAYLOAD_SIZE])
                 -> Result<Option<ServerEvent>, UpdateError> {
-        if packet.len() == 0 {
+        if packet.is_empty() {
             return Ok(None)
         }
 
@@ -598,12 +601,13 @@ impl<I,S> ServerInternal<I,S> where I: SocketProvider<I,S> {
 
 #[cfg(test)]
 mod test {
-    use common::*;
-    use packet::*;
-    use token;
+    use crate::common::*;
+    use crate::packet::*;
+    use crate::token;
     use super::*;
 
-    use socket::capi_simulator::*;
+    #[allow(unused_imports)]
+    use crate::socket::capi_simulator::*;
 
     use std::net::UdpSocket;
 
@@ -629,10 +633,10 @@ mod test {
             let socket = I::bind(&Self::str_to_addr(&addr), server.get_socket_state()).unwrap();
 
             TestHarness {
+                server,
+                private_key,
+                socket,
                 next_sequence: 0,
-                server: server,
-                private_key: private_key,
-                socket: socket,
                 connect_token: Self::generate_connect_token(&private_key, addr.as_str())
             }
         }
@@ -657,10 +661,12 @@ mod test {
             self.connect_token = Self::generate_connect_token(key.unwrap_or(&self.private_key), addr);
         }
 
+        #[allow(dead_code)]
         pub fn get_socket_state(&mut self) -> &mut S {
             self.server.get_socket_state()
         }
 
+        #[allow(dead_code)]
         pub fn get_connect_token(&mut self) -> &token::ConnectToken {
             &self.connect_token
         }
@@ -679,7 +685,7 @@ mod test {
                 protocol_id: PROTOCOL_ID,
                 token_expire: self.connect_token.expire_utc,
                 sequence: self.connect_token.sequence,
-                private_data: private_data
+                private_data
             });
 
             let mut data = [0; NETCODE_MAX_PACKET_SIZE];
@@ -807,7 +813,7 @@ mod test {
 
         LogBuilder::new().filter(None, LogLevelFilter::Trace).init().unwrap();
 
-        use capi::*;
+        use crate::capi::*;
         unsafe {
             netcode_log_level(NETCODE_LOG_LEVEL_DEBUG as i32);
         }

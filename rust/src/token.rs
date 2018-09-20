@@ -4,8 +4,8 @@ use std::io::Write;
 use std::time;
 use byteorder::{WriteBytesExt, ReadBytesExt, LittleEndian, BigEndian};
 
-use common::*;
-use crypto;
+use crate::common::*;
+use crate::crypto;
 
 #[derive(Debug)]
 pub enum GenerateError {
@@ -18,13 +18,13 @@ pub enum GenerateError {
 }
 
 impl From<io::Error> for GenerateError {
-    fn from(err: io::Error) -> GenerateError {
+    fn from(err: io::Error) -> Self {
         GenerateError::GenericIO(err)
     }
 }
 
 impl From<crypto::EncryptError> for GenerateError {
-    fn from(err: crypto::EncryptError) -> GenerateError {
+    fn from(err: crypto::EncryptError) -> Self {
         GenerateError::Encrypt(err)
     }
 }
@@ -42,13 +42,13 @@ pub enum DecodeError {
 }
 
 impl From<io::Error> for DecodeError {
-    fn from(err: io::Error) -> DecodeError {
+    fn from(err: io::Error) -> Self {
         DecodeError::GenericIO(err)
     }
 }
 
 impl From<crypto::EncryptError> for DecodeError {
-    fn from(err: crypto::EncryptError) -> DecodeError {
+    fn from(err: crypto::EncryptError) -> Self {
         DecodeError::Decrypt(err)
     }
 }
@@ -59,6 +59,8 @@ const NETCODE_ADDRESS_IPV6: u8 = 2;
 const NETCODE_ADDITIONAL_DATA_SIZE: usize = NETCODE_VERSION_LEN + 8 + 8;
 
 /// Token used by clients to connect and authenticate to a netcode `Server`
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub struct ConnectToken {
     /// Protocol ID for messages relayed by netcode.
     pub protocol: u64,
@@ -81,8 +83,8 @@ pub struct ConnectToken {
 }
 
 impl Clone for ConnectToken {
-    fn clone(&self) -> ConnectToken {
-        ConnectToken {
+    fn clone(&self) -> Self {
+        Self {
             protocol: self.protocol,
             create_utc: self.create_utc,
             expire_utc: self.expire_utc,
@@ -130,7 +132,7 @@ fn generate_additional_data(protocol: u64, expire_utc: u64) -> Result<[u8; NETCO
     {
         let mut out = io::Cursor::new(&mut scratch[..]);
 
-        out.write(NETCODE_VERSION_STRING)?;
+        out.write_all(NETCODE_VERSION_STRING)?;
         out.write_u64::<LittleEndian>(protocol)?;
         out.write_u64::<LittleEndian>(expire_utc)?;
     }
@@ -165,7 +167,7 @@ impl ConnectToken {
                        protocol: u64,
                        client_id: u64,
                        user_data: Option<&[u8; NETCODE_USER_DATA_BYTES]>)
-                       -> Result<ConnectToken, GenerateError>
+                       -> Result<Self, GenerateError>
                           where H: ExactSizeIterator<Item=I>, I: Into<String> {
         if hosts.len() > NETCODE_MAX_SERVERS_PER_CONNECT {
             return Err(GenerateError::MaxHostCount)
@@ -173,7 +175,7 @@ impl ConnectToken {
 
         let host_list = hosts.flat_map(|addr| {
             use std::net::ToSocketAddrs;
-            addr.into().to_socket_addrs().unwrap_or(vec!().into_iter())
+            addr.into().to_socket_addrs().unwrap_or_else(|_| vec!().into_iter())
         });
 
         Self::generate_internal(host_list, private_key, expire_sec, sequence, protocol, client_id, user_data)
@@ -201,7 +203,7 @@ impl ConnectToken {
                        protocol: u64,
                        client_id: u64,
                        user_data: Option<&[u8; NETCODE_USER_DATA_BYTES]>)
-                       -> Result<ConnectToken, GenerateError>
+                       -> Result<Self, GenerateError>
                           where H: ExactSizeIterator<Item=SocketAddr> {
         if hosts.len() > NETCODE_MAX_SERVERS_PER_CONNECT {
             return Err(GenerateError::MaxHostCount)
@@ -217,7 +219,7 @@ impl ConnectToken {
                        protocol: u64,
                        client_id: u64,
                        user_data: Option<&[u8; NETCODE_USER_DATA_BYTES]>)
-                       -> Result<ConnectToken, GenerateError>
+                       -> Result<Self, GenerateError>
                           where H: Iterator<Item=SocketAddr> {
                 let now = get_time_now();
         let expire = now + expire_sec as u64;
@@ -227,13 +229,13 @@ impl ConnectToken {
         let mut private_data = [0; NETCODE_CONNECT_TOKEN_PRIVATE_BYTES];
         decoded_data.encode(&mut private_data, protocol, expire, sequence, private_key)?;
 
-        Ok(ConnectToken {
+        Ok(Self {
+            protocol,
+            sequence,
+            private_data,
             hosts: decoded_data.hosts.clone(),
             create_utc: now,
             expire_utc: expire,
-            protocol: protocol,
-            sequence: sequence,
-            private_data: private_data,
             client_to_server_key: decoded_data.client_to_server_key,
             server_to_client_key: decoded_data.server_to_client_key,
             timeout_sec: NETCODE_TIMEOUT_SECONDS
@@ -249,22 +251,22 @@ impl ConnectToken {
 
     /// Encodes a ConnectToken into a `io::Write`.
     pub fn write<W>(&self, out: &mut W) -> Result<(), io::Error> where W: io::Write {
-        out.write(NETCODE_VERSION_STRING)?;
+        out.write_all(NETCODE_VERSION_STRING)?;
         out.write_u64::<LittleEndian>(self.protocol)?;
         out.write_u64::<LittleEndian>(self.create_utc)?;
         out.write_u64::<LittleEndian>(self.expire_utc)?;
         out.write_u64::<LittleEndian>(self.sequence)?;
-        out.write(&self.private_data)?;
+        out.write_all(&self.private_data)?;
         self.hosts.write(out)?;
-        out.write(&self.client_to_server_key)?;
-        out.write(&self.server_to_client_key)?;
+        out.write_all(&self.client_to_server_key)?;
+        out.write_all(&self.server_to_client_key)?;
         out.write_u32::<LittleEndian>(self.timeout_sec)?;
 
         Ok(())
     }
 
     /// Decodes a ConnectToken from an `io::Read`.
-    pub fn read<R>(source: &mut R) -> Result<ConnectToken, DecodeError> where R: io::Read {
+    pub fn read<R>(source: &mut R) -> Result<Self, DecodeError> where R: io::Read {
         let mut version = [0; NETCODE_VERSION_LEN];
 
         source.read_exact(&mut version)?;
@@ -291,22 +293,22 @@ impl ConnectToken {
 
         let timeout_sec = source.read_u32::<LittleEndian>()?;
 
-        Ok(ConnectToken {
-            hosts: hosts,
-            create_utc: create_utc,
-            expire_utc: expire_utc,
-            protocol: protocol,
-            sequence: sequence,
-            private_data: private_data,
-            client_to_server_key: client_to_server_key,
-            server_to_client_key: server_to_client_key,
-            timeout_sec: timeout_sec
+        Ok(Self {
+            hosts,
+            create_utc,
+            expire_utc,
+            protocol,
+            sequence,
+            private_data,
+            client_to_server_key,
+            server_to_client_key,
+            timeout_sec
         })
     }
 }
 
 impl PrivateData {
-    pub fn new<H>(client_id: u64, hosts: H, user_data: Option<&[u8; NETCODE_USER_DATA_BYTES]>) -> PrivateData where H: Iterator<Item=SocketAddr> {
+    pub fn new<H>(client_id: u64, hosts: H, user_data: Option<&[u8; NETCODE_USER_DATA_BYTES]>) -> Self where H: Iterator<Item=SocketAddr> {
         let final_user_data = match user_data {
             Some(u) => {
                 let mut copy_ud: [u8; NETCODE_USER_DATA_BYTES] = [0; NETCODE_USER_DATA_BYTES];
@@ -319,12 +321,12 @@ impl PrivateData {
         let client_to_server_key = crypto::generate_key();
         let server_to_client_key = crypto::generate_key();
 
-        PrivateData {
-            client_id: client_id,
+        Self {
+            client_id,
+            client_to_server_key,
+            server_to_client_key,
             hosts: HostList::new(hosts),
             user_data: final_user_data,
-            client_to_server_key: client_to_server_key,
-            server_to_client_key: server_to_client_key
         }
     }
 
@@ -333,13 +335,13 @@ impl PrivateData {
                   expire_utc: u64,
                   sequence: u64,
                   private_key: &[u8; NETCODE_KEY_BYTES])
-                  -> Result<PrivateData, DecodeError> {
+                  -> Result<Self, DecodeError> {
         let additional_data = generate_additional_data(protocol_id, expire_utc)?;
         let mut decoded = [0; NETCODE_CONNECT_TOKEN_PRIVATE_BYTES - crypto::NETCODE_ENCRYPT_EXTA_BYTES];
 
         crypto::decode(&mut decoded, encoded, Some(&additional_data), sequence, private_key)?;
 
-        Ok(PrivateData::read(&mut io::Cursor::new(&decoded[..]))?)
+        Ok(Self::read(&mut io::Cursor::new(&decoded[..]))?)
     }
 
     pub fn encode(&self, 
@@ -363,15 +365,15 @@ impl PrivateData {
         out.write_u64::<LittleEndian>(self.client_id)?;
 
         self.hosts.write(out)?;
-        out.write(&self.client_to_server_key)?;
-        out.write(&self.server_to_client_key)?;
+        out.write_all(&self.client_to_server_key)?;
+        out.write_all(&self.server_to_client_key)?;
 
-        out.write(&self.user_data)?;
+        out.write_all(&self.user_data)?;
 
         Ok(())
     }
 
-    fn read<R>(source: &mut R) -> Result<PrivateData, io::Error> where R: io::Read {
+    fn read<R>(source: &mut R) -> Result<Self, io::Error> where R: io::Read {
         let client_id = source.read_u64::<LittleEndian>()?;
         let hosts = HostList::read(source)?;
 
@@ -384,34 +386,34 @@ impl PrivateData {
         let mut user_data = [0; NETCODE_USER_DATA_BYTES];
         source.read_exact(&mut user_data)?;
 
-        Ok(PrivateData {
-            hosts: hosts,
-            client_id: client_id,
-            client_to_server_key: client_to_server_key,
-            server_to_client_key: server_to_client_key,
-            user_data: user_data
+        Ok(Self {
+            hosts,
+            client_id,
+            client_to_server_key,
+            server_to_client_key,
+            user_data
         })
     }
 }
 
 impl HostList {
-    pub fn new<I>(hosts: I) -> HostList where I: Iterator<Item=SocketAddr> {
+    pub fn new<I>(hosts: I) -> Self where I: Iterator<Item=SocketAddr> {
         let mut final_hosts = [None; NETCODE_MAX_SERVERS_PER_CONNECT];
 
         for (i,host) in hosts.enumerate().take(NETCODE_MAX_SERVERS_PER_CONNECT) {
             final_hosts[i] = Some(host);
         }
 
-        HostList {
+        Self {
             hosts: final_hosts
         }
     }
 
-    pub fn read<R>(source: &mut R) -> Result<HostList, io::Error> where R: io::Read {
+    pub fn read<R>(source: &mut R) -> Result<Self, io::Error> where R: io::Read {
         let host_count = source.read_u32::<LittleEndian>()?;
         let mut hosts = [None; NETCODE_MAX_SERVERS_PER_CONNECT];
 
-        for i in 0..host_count as usize {
+        for host in hosts.iter_mut().take(host_count as usize) {
             let host_type = source.read_u8()?;
 
             match host_type {
@@ -419,32 +421,34 @@ impl HostList {
                     let ip = source.read_u32::<BigEndian>()?;
                     let port = source.read_u16::<LittleEndian>()?;
 
-                    hosts[i] = Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip)), port))
+                    *host = Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip)), port))
                 },
                 NETCODE_ADDRESS_IPV6 => {
                     let mut ip = [0; 16];
                     source.read_exact(&mut ip)?;
                     let port = source.read_u16::<LittleEndian>()?;
 
-                    hosts[i] = Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip)), port))
+                    *host = Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip)), port))
                 },
                 _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "Unknown ip address type"))
             }
         }
 
-        Ok(HostList {
-            hosts: hosts
+        Ok(Self {
+            hosts
         })
     }
 
-    pub fn get(&self) -> HostIterator {
+    pub fn get(&self) -> HostIterator<'_> {
         HostIterator {
             hosts: self,
-            idx: 0
+            idx: 0,
         }
     }
 
     pub fn write<W>(&self, out: &mut W) -> Result<(), io::Error> where W: io::Write {
+        // TODO: fix me
+        #[cfg_attr(feature="cargo-clippy", allow(cast_possible_truncation))]
         out.write_u32::<LittleEndian>(self.get().len() as u32)?;
         for host in self.get() {
             match host {
@@ -452,16 +456,16 @@ impl HostList {
                     out.write_u8(NETCODE_ADDRESS_IPV4)?;
                     let ip = addr.ip().octets();
 
-                    for i in 0..4 {
-                        out.write_u8(ip[i])?;
+                    for i in ip.iter().take(4) {
+                        out.write_u8(*i)?;
                     }
                 },
                 SocketAddr::V6(addr) => {
                     out.write_u8(NETCODE_ADDRESS_IPV6)?;
                     let ip = addr.ip().octets();
 
-                    for i in 0..16 {
-                        out.write_u8(ip[i])?;
+                    for i in ip.iter().take(16) {
+                        out.write_u8(*i)?;
                     }
                 }
             }
@@ -473,7 +477,7 @@ impl HostList {
 }
 
 impl PartialEq for HostList {
-    fn eq(&self, other: &HostList) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.hosts == other.hosts
     }
 }
@@ -591,7 +595,7 @@ fn decode() {
 fn capi_connect_token<I>(hosts: I, private_key: &[u8; NETCODE_KEY_BYTES], expire: i32, client_id: u64, protocol: u64, sequence: u64)
         -> Result<[u8; NETCODE_CONNECT_TOKEN_BYTES], ()>
         where I: Iterator<Item=String> {
-    use capi;
+    use crate::capi;
     use std::ffi::CString;
 
     let mut host_list_ptr = [::std::ptr::null_mut(); NETCODE_MAX_SERVERS_PER_CONNECT];
@@ -664,9 +668,9 @@ fn interop_read() {
 #[test]
 fn interop_write() {
     #[allow(unused_variables)]
-    let lock = ::common::test::FFI_LOCK.lock().unwrap();
+    let lock = crate::common::test::FFI_LOCK.lock().unwrap();
 
-    use capi;
+    use crate::capi;
 
     let mut private_key = [0; NETCODE_KEY_BYTES];
     crypto::random_bytes(&mut private_key);

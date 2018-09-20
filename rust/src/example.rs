@@ -5,11 +5,9 @@
 //! client. Note that since this is a UDP based protocol it's expected some messages will be dropped.
 //! Once done the string "exit" will cause the client to disconnect which the server will then 
 //! terminate when it hears the disconnect from the client.
-
-extern crate netcode;
-extern crate time;
-extern crate log;
-extern crate env_logger;
+#![cfg_attr(feature="cargo-clippy", warn(clippy, clippy_correctness, clippy_style, clippy_pedantic, clippy_perf))]
+#![feature(nll, stmt_expr_attributes)]
+#![warn(rust_2018_idioms)]
 
 use netcode::{UdpServer, ServerEvent, UdpClient, ClientEvent, ClientState, NETCODE_MAX_PAYLOAD_SIZE};
 
@@ -19,10 +17,10 @@ use std::time::Duration;
 use std::io::{self, BufRead};
 
 const MAX_CLIENTS: usize = 256;     //Total number of clients we support
-const PROTOCOL_ID: u64 = 0xFFDDEE;  //Unique protocol id for our application.
+const PROTOCOL_ID: u64 = 0x00FF_DDEE;  //Unique protocol id for our application.
 const TOKEN_LIFETIME: usize = 15;   //Our token lives 15 seconds.
 
-const CLIENT_ID: u64 = 0xDDEEFF;    //Single unique client id, you'll want to tie this into
+const CLIENT_ID: u64 = 0x00DD_EEFF;    //Single unique client id, you'll want to tie this into
                                     // your user store in production.
 
 const TICK_TIME_MS: f64 = 0.016; //Tick every 16ms
@@ -34,6 +32,8 @@ fn sleep_for_tick(last_tick: &mut f64) -> f64 {
     let elapsed = (now - *last_tick).min(TICK_TIME_MS);
 
     if elapsed < TICK_TIME_MS {
+        // TODO: fix me
+        #[cfg_attr(feature="cargo-clippy", allow(cast_possible_truncation, cast_sign_loss))]
         let sleep_ms = ((TICK_TIME_MS - elapsed) * 1000.0).floor() as u64;
         thread::sleep(Duration::from_millis(sleep_ms));
     }
@@ -74,10 +74,8 @@ fn main() {
                         println!("Heard packet, echoing back");
                         server.send(id, &packet[..size]).unwrap();
                     },
-                    ServerEvent::SentKeepAlive(_id) => {},
-                    ServerEvent::RejectedClient => {},
-                    ServerEvent::ReplayRejected(_id) => {},
-                    ServerEvent::ClientSlotFull => {}
+                    ServerEvent::SentKeepAlive(_id) | ServerEvent::ReplayRejected(_id) => {},
+                    ServerEvent::RejectedClient | ServerEvent::ClientSlotFull => {},
                 }
             }
         }

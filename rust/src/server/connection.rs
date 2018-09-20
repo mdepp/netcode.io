@@ -1,8 +1,10 @@
-use server;
-use channel::Channel;
+use crate::server;
+use crate::channel::Channel;
 
 /// Current state of the client connection.
 #[derive(Clone, Debug)]
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub enum ConnectionState {
     /// We've recieved the initial packet but response is outstanding yet.
     PendingResponse,

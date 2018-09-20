@@ -7,7 +7,7 @@ use std::fs::File;
 use std::time::{Duration};
 
 pub fn main() {
-    gcc::Config::new()
+    gcc::Build::new()
         .file("c/netcode.c")
         .include("c")
         .include("c/windows")

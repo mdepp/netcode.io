@@ -22,6 +22,9 @@ Makefile
 *.sublime-project
 *.sublime-workspace
 
+# CLion
+.idea
+
 # Directories we don't ever want to commit
 bin
 obj

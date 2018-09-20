@@ -2,6 +2,8 @@ use std::net::{SocketAddr, UdpSocket};
 use std::io;
 use std::time::Duration;
 
+// TODO: fix this
+#[cfg_attr(feature="cargo-clippy", allow(stutter))]
 pub trait SocketProvider<I,S> {
     fn new_state() -> S;
     fn bind(addr: &SocketAddr, state: &mut S) -> Result<I, io::Error>;
@@ -16,15 +18,15 @@ impl SocketProvider<UdpSocket,()> for UdpSocket {
         ()
     }
 
-    fn bind(addr: &SocketAddr, _state: &mut ()) -> Result<UdpSocket, io::Error> {
-        let socket = UdpSocket::bind(addr)?;
+    fn bind(addr: &SocketAddr, _state: &mut ()) -> Result<Self, io::Error> {
+        let socket = Self::bind(addr)?;
         socket.set_nonblocking(true)?;
 
         Ok(socket)
     }
 
     fn local_addr(&self) -> Result<SocketAddr, io::Error> {
-        UdpSocket::local_addr(self)
+        Self::local_addr(self)
     }
 
     fn set_recv_timeout(&mut self, duration: Option<Duration>) -> Result<(), io::Error> {
@@ -40,23 +42,24 @@ impl SocketProvider<UdpSocket,()> for UdpSocket {
     }
 
     fn recv_from(&mut self, buf: &mut [u8]) -> Result<(usize, SocketAddr), io::Error> {
-        UdpSocket::recv_from(self, buf)
+        Self::recv_from(self, buf)
     }
 
     fn send_to(&mut self, buf: &[u8], addr: &SocketAddr) -> Result<usize, io::Error> {
-        UdpSocket::send_to(self, buf, addr)
+        Self::send_to(self, buf, addr)
     }
 }
 
 #[cfg(test)]
 pub mod capi_simulator {
     use super::*;
-    use capi::*;
+    use crate::capi::*;
 
     use std::rc::{Rc, Weak};
     use std::cell::RefCell;
     use std::ffi::{CString, CStr};
 
+    #[allow(unused)]
     pub type SimulatorRef = Rc<RefCell<Simulator>>;
 
     pub struct Simulator {
@@ -71,11 +74,13 @@ pub mod capi_simulator {
         }
     }
 
+    #[allow(unused)]
     pub struct SimulatedSocket {
         local_addr: SocketAddr,
         sim: Weak<RefCell<Simulator>>
     }
 
+    #[allow(unused)]
     fn addr_to_naddr(addr: &SocketAddr) -> Result<netcode_address_t, io::Error> {
         unsafe {
             let mut naddr: netcode_address_t = ::std::mem::uninitialized();
@@ -89,6 +94,7 @@ pub mod capi_simulator {
         }
     }
 
+    #[allow(unused)]
     fn naddr_to_addr(naddr: &netcode_address_t) -> Result<SocketAddr, io::Error> {
         use std::str::FromStr;
 

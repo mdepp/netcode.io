@@ -1,13 +1,13 @@
-use common::*;
-use error::*;
-use replay::ReplayProtection;
-use packet::{self, Packet, KeepAlivePacket};
-use socket::SocketProvider;
+use crate::common::*;
+use crate::error::*;
+use crate::replay::ReplayProtection;
+use crate::packet::{self, Packet, KeepAlivePacket};
+use crate::socket::SocketProvider;
 
 use std::net::SocketAddr;
 
 pub const TIMEOUT_SECONDS: u32 = 5;
-pub const KEEPALIVE_RETRY: f64 = 1.0 / 1.0;
+pub const KEEPALIVE_RETRY: f64 = 1.0;
 
 #[derive(Clone, Debug)]
 pub struct KeepAliveState {
@@ -16,8 +16,8 @@ pub struct KeepAliveState {
 }
 
 impl KeepAliveState {
-    pub fn new(current_time: f64) -> KeepAliveState {
-        KeepAliveState {
+    pub fn new(current_time: f64) -> Self {
+        Self {
             last_sent: current_time,
             last_response: current_time
         }
@@ -32,7 +32,7 @@ impl KeepAliveState {
     }
 
     pub fn has_expired(&self, time: f64) -> bool {
-        self.last_response + (TIMEOUT_SECONDS as f64) < time
+        self.last_response + f64::from(TIMEOUT_SECONDS) < time
     }
 
     pub fn should_send_keepalive(&self, time: f64) -> bool {
@@ -66,17 +66,17 @@ impl Channel {
                protocol_id: u64,
                client_idx: usize,
                max_clients: usize,
-               time: f64) -> Channel {
-        Channel {
+               time: f64) -> Self {
+        Self {
             keep_alive: KeepAliveState::new(time),
-            send_key: send_key.clone(),
-            recv_key: recv_key.clone(),
+            send_key: *send_key,
+            recv_key: *recv_key,
             replay_protection: ReplayProtection::new(),
             next_sequence: 0,
-            addr: addr.clone(),
-            protocol_id: protocol_id,
-            client_idx: client_idx,
-            max_clients: max_clients
+            addr: *addr,
+            protocol_id,
+            client_idx,
+            max_clients
         }
     }
 
@@ -104,6 +104,8 @@ impl Channel {
         Ok(packet)
     }
 
+    // TODO: fix me
+    #[cfg_attr(feature="cargo-clippy", allow(cast_possible_wrap, cast_possible_truncation))]
     pub fn send_keep_alive<I,S>(&mut self, elapsed: f64, socket: &mut I) -> Result<usize, SendError> where I: SocketProvider<I,S> {
         let keep_alive = KeepAlivePacket {
             client_idx: self.client_idx as i32,
