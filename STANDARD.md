@@ -1,4 +1,4 @@
-# netcode.io 1.0
+# netcode.io 1.01
 
 **netcode.io** is a simple protocol for creating secure client/server connections over UDP.
 
@@ -42,10 +42,11 @@ The private portion is encrypted and signed with a private key shared between th
 Prior to encryption the private connect token data has the following binary format.
 
     [client id] (uint64) // globally unique identifier for an authenticated client
+    [timeout seconds] (uint32) // timeout in seconds. negative values disable timeout (dev only)
     [num server addresses] (uint32) // in [1,32]
     <for each server address>
     {
-        [address type] (uint8) // value of 0 = IPv4 address, 1 = IPv6 address.
+        [address type] (uint8) // value of 1 = IPv4 address, 2 = IPv6 address.
         <if IPV4 address>
         {
             // for a given IPv4 address: a.b.c.d:port
@@ -78,7 +79,7 @@ This data is variable size but for simplicity is written to a fixed size buffer 
 
 Encryption of the private connect token data is performed with the libsodium AEAD primitive *crypto_aead_chacha20poly1305_ietf_encrypt* using the following binary data as the _associated data_: 
 
-    [version info] (13 bytes)       // "NETCODE 1.00" ASCII with null terminator.
+    [version info] (13 bytes)       // "NETCODE 1.01" ASCII with null terminator.
     [protocol id] (uint64)          // 64 bit value unique to this particular game/application
     [expire timestamp] (uint64)     // 64 bit unix timestamp when this connect token expires
 
@@ -93,16 +94,17 @@ Post encryption, this is referred to as the _encrypted private connect token dat
 
 Together the public and private data form a _connect token_:
 
-    [version info] (13 bytes)       // "NETCODE 1.00" ASCII with null terminator.
+    [version info] (13 bytes)       // "NETCODE 1.01" ASCII with null terminator.
     [protocol id] (uint64)          // 64 bit value unique to this particular game/application
     [create timestamp] (uint64)     // 64 bit unix timestamp when this connect token was created
     [expire timestamp] (uint64)     // 64 bit unix timestamp when this connect token expires
     [connect token sequence] (uint64)
     [encrypted private connect token data] (1024 bytes)
+    [timeout seconds] (uint32)      // timeout in seconds. negative values disable timeout (dev only)
     [num_server_addresses] (uint32) // in [1,32]
     <for each server address>
     {
-        [address_type] (uint8) // value of 0 = IPv4 address, 1 = IPv6 address.
+        [address_type] (uint8) // value of 1 = IPv4 address, 2 = IPv6 address.
         <if IPV4 address>
         {
             // for a given IPv4 address: a.b.c.d:port
@@ -128,7 +130,6 @@ Together the public and private data form a _connect token_:
     }
     [client to server key] (32 bytes)
     [server to client key] (32 bytes)
-    [timeout seconds] (uint32)          // number of seconds with no packets before client times out
     <zero pad to 2048 bytes>
 
 This data is variable size but for simplicity is written to a fixed size buffer of 2048 bytes. Unused bytes are zero padded.
@@ -167,7 +168,7 @@ This is referred to as the _encrypted challenge token data_.
 The first packet type _connection request packet_ (0) is not encrypted and has the following format:
 
     0 (uint8) // prefix byte of zero
-    [version info] (13 bytes)       // "NETCODE 1.00" ASCII with null terminator.
+    [version info] (13 bytes)       // "NETCODE 1.01" ASCII with null terminator.
     [protocol id] (8 bytes)
     [connect token expire timestamp] (8 bytes)
     [connect token sequence number] (8 bytes)
@@ -185,9 +186,9 @@ The low 4 bits of the prefix byte contain the packet type.
 
 The high 4 bits contain the number of bytes for the sequence number in the range [1,8]. 
 
-The sequence number is encoded by omitting high zero bytes. For example, a sequence number of 1000 is 0x000003E8 and requires only three bytes to send its value. Therefore, the high 4 bits of the prefix byte are set to 3 and the sequence data written to the packet is:
+The sequence number is encoded by omitting high zero bytes. For example, a sequence number of 1000 is 0x000003E8 and requires only two bytes to send its value. Therefore, the high 4 bits of the prefix byte are set to 2 and the sequence data written to the packet is:
 
-    0x8,0xE,0x3
+    0xE8,0x03
     
 The sequence number bytes are _reversed_ when written to the packet like so:
 
@@ -228,7 +229,7 @@ _connection disconnect packet_:
 
 The per-packet type data is encrypted using the libsodium AEAD primitive *crypto_aead_chacha20poly1305_ietf_encrypt* with the following binary data as the _associated data_: 
 
-    [version info] (13 bytes)       // "NETCODE 1.00" ASCII with null terminator.
+    [version info] (13 bytes)       // "NETCODE 1.01" ASCII with null terminator.
     [protocol id] (uint64)          // 64 bit value unique to this particular game/application
     [prefix byte] (uint8)           // prefix byte in packet. stops an attacker from modifying packet type.
 
@@ -401,7 +402,7 @@ The server follows these strict rules when processing connection requests:
 When a server receives a connection request packet from a client it contains the following data:
 
     0 (uint8) // prefix byte of zero
-    [version info] (13 bytes)       // "NETCODE 1.00" ASCII with null terminator.
+    [version info] (13 bytes)       // "NETCODE 1.01" ASCII with null terminator.
     [protocol id] (8 bytes)
     [connect token expire timestamp] (8 bytes)
     [connect token sequence number] (8 bytes)
@@ -417,7 +418,7 @@ The server takes the following steps, in this exact order, when processing a _co
 
 * If the packet is not the expected size of 1062 bytes, ignore the packet.
 
-* If the version info in the packet doesn't match "NETCODE 1.00" (13 bytes, with null terminator), ignore the packet.
+* If the version info in the packet doesn't match "NETCODE 1.01" (13 bytes, with null terminator), ignore the packet.
 
 * If the protocol id in the packet doesn't match the expected protocol id of the dedicated server, ignore the packet.
 

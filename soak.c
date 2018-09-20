@@ -34,6 +34,7 @@
 #define MAX_CLIENTS 1024
 #define SERVER_BASE_PORT 40000
 #define CONNECT_TOKEN_EXPIRY 45
+#define CONNECT_TOKEN_TIMEOUT 5
 #define PROTOCOL_ID 0x1122334455667788
 
 static volatile int quit = 0;
@@ -118,6 +119,11 @@ void soak_iteration( double time )
 {
     int i;
 
+    struct netcode_server_config_t server_config;
+    netcode_default_server_config( &server_config );
+    server_config.protocol_id = PROTOCOL_ID;
+    memcpy( &server_config.private_key, private_key, NETCODE_KEY_BYTES );
+
     for ( i = 0; i < MAX_SERVERS; ++i )
     {
         if ( server[i] == NULL && random_int( 0, 10 ) == 0 )
@@ -128,7 +134,9 @@ void soak_iteration( double time )
 			#else
 			sprintf( server_address, "127.0.0.1:%d", SERVER_BASE_PORT + i );
 			#endif
-            server[i] = netcode_server_create( server_address, PROTOCOL_ID, private_key, time );
+        
+            server[i] = netcode_server_create( server_address, &server_config, time );
+
             printf( "created server %p\n", server[i] );
         }
 
@@ -144,7 +152,9 @@ void soak_iteration( double time )
     {
         if ( client[i] == NULL && random_int( 0, 10 ) == 0 )
         {
-            client[i] = netcode_client_create( "0.0.0.0", time );
+            struct netcode_client_config_t client_config;
+            netcode_default_client_config( &client_config );
+            client[i] = netcode_client_create( "0.0.0.0", &client_config, time );
             printf( "created client %p\n", client[i] );
         }
 
@@ -237,7 +247,7 @@ void soak_iteration( double time )
                     }
                 }
 
-                if ( num_server_addresses > 0 && netcode_generate_connect_token( num_server_addresses, server_address, CONNECT_TOKEN_EXPIRY, client_id, PROTOCOL_ID, 0, private_key, connect_token ) )
+                if ( num_server_addresses > 0 && netcode_generate_connect_token( num_server_addresses, (NETCODE_CONST char**) server_address, (NETCODE_CONST char**) server_address, CONNECT_TOKEN_EXPIRY, CONNECT_TOKEN_TIMEOUT, client_id, PROTOCOL_ID, 0, private_key, connect_token ) )
                 {
                     netcode_client_connect( client[i], connect_token );
                 }

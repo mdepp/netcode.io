@@ -1,60 +1,43 @@
 [![Travis Build Status](https://travis-ci.org/networkprotocol/netcode.io.svg?branch=master)](https://travis-ci.org/networkprotocol/netcode.io)
-[![](http://meritbadge.herokuapp.com/netcode)](https://crates.io/crates/netcode)
-[![](https://docs.rs/netcode/badge.svg)](https://docs.rs/netcode)
 
 # netcode.io
 
-**netcode.io** is a simple protocol for creating secure client/server connections over UDP.
+**netcode.io** is a simple connection-oriented protocol built on top of UDP. 
 
-It’s designed for games like [agar.io](http://agar.io) that shunt players from a main website or web backend to a number of dedicated server instances, with each dedicated server having some maximum number of players.
+It's designed for client server/games with dedicated servers, like first person shooters and e-sports.
 
 It has the following features:
 
-1. Connection oriented
-2. Encrypts and sign packets
-3. All packets are delivered over UDP
-4. Only authenticated clients can connect to dedicated servers
+* Token system so only authenticated clients can connect to your server.
+* Packets sent between clients and server are encrypted and signed.
 
-# What are the benefits?
+And it's secure by design:
 
-## Simplicity
+* Protection against man-in-the-middle attacks.
+* Protection against DDoS amplification attacks.
+* Protection against packet replay attacks.
+* Protection against zombie clients.
 
-netcode.io is a simple protocol that can easily be incorporated into a client, dedicated server or web backend.
-
-It has no external dependencies except [libsodium](http://www.libsodium.org), which is widely used and well tested.
-
-## Full bidirectional transfer of data
-
-Once a netcode.io connection is established, data can be exchanged between client and server at any rate, bidirectionally.
-
-## No head of line blocking
-
-Data is sent across UDP so it's not subject to head of line blocking. No head of line blocking means games play better, as time series data like player inputs and object positions are transmitted as quickly as possible, without being artificially delayed waiting for dropped packets to be resent.
-
-## Connection rate limiting can be performed on the web backend
-
-Because netcode.io servers only accept connections from clients with short-lived connect tokens, traditional web rate limiting can be applied to the REST calls that generate connect tokens for authenticated users, instead of rate limiting incoming connections at the UDP protocol level.
+Save yourself some time by using netcode.io instead of writing and testing all this yourself!
 
 # How does it work?
 
-Please refer to the second half of this whitepaper: [Why can't I send UDP packets from a browser?](http://new.gafferongames.com/post/why_cant_i_send_udp_packets_from_a_browser/) 
+Please refer to the second half of this whitepaper: [Why can't I send UDP packets from a browser?](http://gafferongames.com/post/why_cant_i_send_udp_packets_from_a_browser/) 
 
-For a complete technical specification, read the [netcode 1.0 standard](https://github.com/networkprotocol/netcode.io/blob/master/STANDARD.md).
+For a complete technical specification, read the [netcode 1.01 standard](https://github.com/networkprotocol/netcode.io/blob/master/STANDARD.md).
 
-# How can I help?
+# Source Code
 
-This is an open source project and we welcome contributions. Please join us!
+This repository holds the reference implementation of netcode.io in C.
 
-Here are some things that we think would be helpful:
+Other netcode.io repositories include:
 
-* Provide feedback on the reference implementation
-* Study the code, and look for flaws and weaknesses
-* Create bindings for netcode.io for your favorite language
-* Port netcode.io to your favorite language (eg. C#, Java, Lua, Python, Ruby...)
-* We welcome anybody who would like to volunteer to perform a security audit of the code
-* Develop a testing framework to guarantee that different languages implementations conform to the [standard](https://github.com/networkprotocol/netcode.io/blob/master/STANDARD.md)
-
-Please let me know if you have any more ideas, and feel free to ask questions and get involved by logging issues.
+* [netcode.io C# implementation](https://github.com/KillaMaaki/Netcode.IO.NET)
+* [netcode.io Golang implementation](https://github.com/wirepair/netcode)
+* [netcode.io Rust implementation](https://github.com/vvanders/netcode.io)
+* [netcode.io for Unity](https://github.com/KillaMaaki/Unity-Netcode.IO)
+* [netcode.io for UE4](https://github.com/RedpointGames/netcode.io-UE4)
+* [netcode.io browser plugin](https://github.com/RedpointGames/netcode.io-browser)
 
 # Contributors
 
@@ -62,16 +45,18 @@ These people are awesome:
 
 * [Val Vanders](https://github.com/vvanders) - Rust Implementation
 * [Isaac Dawson](https://github.com/wirepair) - Golang Implementation
+* [June Rhodes](https://github.com/hach-que) - C# bindings, browser support, UE4 integration.
+* [Alan Stagner](https://github.com/KillaMaaki) - Unity integration, C# implementation.
 
-Thank you for your contributions to netcode.io!
+Thanks for your contributions to netcode.io!
 
 # Author
 
 The author of this library is [Glenn Fiedler](https://www.linkedin.com/in/glennfiedler), a recognized expert in the field of game network programming with over 15 years experience in the game industry.
 
-Glenn is currently writing an article series about the development of this library called [Building a Game Network Protocol](http://gafferongames.com/2016/05/10/building-a-game-network-protocol/).
+Glenn wrote an article series about the development of this library called [Building a Game Network Protocol](https://gafferongames.com/categories/building-a-game-network-protocol).
 
-You can support Glenn's work writing articles and open source code via [Patreon](http://www.patreon.com/gafferongames).
+Open source libraries by the same author include: [yojimbo](http://libyojimbo.com) and [reliable.io](https://github.com/networkprotocol/reliable.io)
 
 # Sponsors
 
@@ -89,7 +74,7 @@ You can support Glenn's work writing articles and open source code via [Patreon]
     * [Kite & Lightning](http://kiteandlightning.la/)
     * [Data Realms](http://datarealms.com)
  
-And by individual supporters on [Patreon](http://www.patreon.com/gafferongames). Thank you. You make this possible!
+And by individual supporters on Patreon. Thank you. You made this possible!
 
 # License
 

@@ -25,6 +25,10 @@ Makefile
 # CLion
 .idea
 
+#Rust
+target
+Cargo.lock
+
 # Directories we don't ever want to commit
 bin
 obj
@@ -38,6 +42,3 @@ c/docker/netcode.io
 c/valgrind/netcode.io
 docs
 *.exe
-go/netcode/examples/client/client.exe
-target
-Cargo.lock

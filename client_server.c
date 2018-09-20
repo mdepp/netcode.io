@@ -24,10 +24,14 @@
 
 #include "netcode.h"
 #include <stdio.h>
-#include <assert.h>
 #include <string.h>
+#include <assert.h>
 #include <signal.h>
 #include <inttypes.h>
+
+#define CONNECT_TOKEN_EXPIRY 30
+#define CONNECT_TOKEN_TIMEOUT 5
+#define PROTOCOL_ID 0x1122334455667788
 
 static volatile int quit = 0;
 
@@ -58,15 +62,26 @@ int main( int argc, char ** argv )
     double time = 0.0;
     double delta_time = 1.0 / 60.0;
 
-    printf( "[server]\n" );
+    printf( "[client/server]\n" );
 
-    #define TEST_PROTOCOL_ID 0x1122334455667788
+    struct netcode_client_config_t client_config;
+    netcode_default_client_config( &client_config );
+    struct netcode_client_t * client = netcode_client_create( "::", &client_config, time );
 
-    char * server_address = "127.0.0.1:40000";
-    if ( argc == 2 )
-        server_address = argv[1];
+    if ( !client )
+    {
+        printf( "error: failed to create client\n" );
+        return 1;
+    }
 
-    struct netcode_server_t * server = netcode_server_create( server_address, TEST_PROTOCOL_ID, private_key, time );
+    struct netcode_server_config_t server_config;
+    netcode_default_server_config( &server_config );
+    server_config.protocol_id = PROTOCOL_ID;
+    memcpy( &server_config.private_key, private_key, NETCODE_KEY_BYTES );
+
+    char * server_address = "[::1]:40000";
+
+    struct netcode_server_t * server = netcode_server_create( server_address, &server_config, time );
 
     if ( !server )
     {
@@ -74,9 +89,26 @@ int main( int argc, char ** argv )
         return 1;
     }
 
-    netcode_server_start( server, NETCODE_MAX_CLIENTS );
+    netcode_server_start( server, 1 );
+
+    uint8_t connect_token[NETCODE_CONNECT_TOKEN_BYTES];
+
+    uint64_t client_id = 0;
+    netcode_random_bytes( (uint8_t*) &client_id, 8 );
+    printf( "client id is %.16" PRIx64 "\n", client_id );
+
+    if ( netcode_generate_connect_token( 1, (NETCODE_CONST char**) &server_address, (NETCODE_CONST char**) &server_address, CONNECT_TOKEN_EXPIRY, CONNECT_TOKEN_TIMEOUT, client_id, PROTOCOL_ID, 0, private_key, connect_token ) != NETCODE_OK )
+    {
+        printf( "error: failed to generate connect token\n" );
+        return 1;
+    }
+
+    netcode_client_connect( client, connect_token );
 
     signal( SIGINT, interrupt_handler );
+
+    int server_num_packets_received = 0;
+    int client_num_packets_received = 0;
 
     uint8_t packet_data[NETCODE_MAX_PACKET_SIZE];
     int i;
@@ -85,29 +117,60 @@ int main( int argc, char ** argv )
 
     while ( !quit )
     {
+        netcode_client_update( client, time );
+
         netcode_server_update( server, time );
+
+        if ( netcode_client_state( client ) == NETCODE_CLIENT_STATE_CONNECTED )
+        {
+            netcode_client_send_packet( client, packet_data, NETCODE_MAX_PACKET_SIZE );
+        }
 
         if ( netcode_server_client_connected( server, 0 ) )
         {
             netcode_server_send_packet( server, 0, packet_data, NETCODE_MAX_PACKET_SIZE );
         }
 
-        int client_index;
-        for ( client_index = 0; client_index < NETCODE_MAX_CLIENTS; ++client_index )
+        while ( 1 )             
         {
-            while ( 1 )             
+            int packet_bytes;
+            uint64_t packet_sequence;
+            void * packet = netcode_client_receive_packet( client, &packet_bytes, &packet_sequence );
+            if ( !packet )
+                break;
+            (void) packet_sequence;
+            assert( packet_bytes == NETCODE_MAX_PACKET_SIZE );
+            assert( memcmp( packet, packet_data, NETCODE_MAX_PACKET_SIZE ) == 0 );            
+            client_num_packets_received++;
+            netcode_client_free_packet( client, packet );
+        }
+
+        while ( 1 )             
+        {
+            int packet_bytes;
+            uint64_t packet_sequence;
+            void * packet = netcode_server_receive_packet( server, 0, &packet_bytes, &packet_sequence );
+            if ( !packet )
+                break;
+            (void) packet_sequence;
+            assert( packet_bytes == NETCODE_MAX_PACKET_SIZE );
+            assert( memcmp( packet, packet_data, NETCODE_MAX_PACKET_SIZE ) == 0 );            
+            server_num_packets_received++;
+            netcode_server_free_packet( server, packet );
+        }
+
+        if ( client_num_packets_received >= 10 && server_num_packets_received >= 10 )
+        {
+            if ( netcode_server_client_connected( server, 0 ) )
             {
-                int packet_bytes;
-                uint64_t packet_sequence;
-                void * packet = netcode_server_receive_packet( server, client_index, &packet_bytes, &packet_sequence );
-                if ( !packet )
-                    break;
-                (void) packet_sequence;
-                assert( packet_bytes == NETCODE_MAX_PACKET_SIZE );
-                assert( memcmp( packet, packet_data, NETCODE_MAX_PACKET_SIZE ) == 0 );            
-                netcode_server_free_packet( server, packet );
+                printf( "client and server successfully exchanged packets\n" );
+
+                netcode_server_disconnect_client( server, 0 );
             }
         }
+
+        if ( netcode_client_state( client ) <= NETCODE_CLIENT_STATE_DISCONNECTED )
+            break;
 
         netcode_sleep( delta_time );
 
@@ -120,6 +183,8 @@ int main( int argc, char ** argv )
     }
 
     netcode_server_destroy( server );
+
+    netcode_client_destroy( client );
 
     netcode_term();
     
