@@ -53,6 +53,7 @@ impl From<crypto::EncryptError> for DecodeError {
     }
 }
 
+const NETCODE_ADDRESS_NONE: u8 = 0;
 const NETCODE_ADDRESS_IPV4: u8 = 1;
 const NETCODE_ADDRESS_IPV6: u8 = 2;
 
@@ -79,7 +80,7 @@ pub struct ConnectToken {
     /// Private key for server -> client communcation.
     pub server_to_client_key: [u8; NETCODE_KEY_BYTES],
     /// Time in seconds connection should wait before disconnecting
-    pub timeout_sec: u32
+    pub timeout_sec: i32
 }
 
 impl Clone for ConnectToken {
@@ -257,10 +258,10 @@ impl ConnectToken {
         out.write_u64::<LittleEndian>(self.expire_utc)?;
         out.write_u64::<LittleEndian>(self.sequence)?;
         out.write_all(&self.private_data)?;
+        out.write_i32::<LittleEndian>(self.timeout_sec)?;
         self.hosts.write(out)?;
         out.write_all(&self.client_to_server_key)?;
         out.write_all(&self.server_to_client_key)?;
-        out.write_u32::<LittleEndian>(self.timeout_sec)?;
 
         Ok(())
     }
@@ -283,6 +284,8 @@ impl ConnectToken {
         let mut private_data = [0; NETCODE_CONNECT_TOKEN_PRIVATE_BYTES];
         source.read_exact(&mut private_data)?;
 
+        let timeout_sec = source.read_i32::<LittleEndian>()?;
+
         let hosts = HostList::read(source)?;
 
         let mut client_to_server_key = [0; NETCODE_KEY_BYTES];
@@ -290,8 +293,6 @@ impl ConnectToken {
 
         let mut server_to_client_key = [0; NETCODE_KEY_BYTES];
         source.read_exact(&mut server_to_client_key)?;
-
-        let timeout_sec = source.read_u32::<LittleEndian>()?;
 
         Ok(Self {
             hosts,
@@ -415,7 +416,6 @@ impl HostList {
 
         for host in hosts.iter_mut().take(host_count as usize) {
             let host_type = source.read_u8()?;
-
             match host_type {
                 NETCODE_ADDRESS_IPV4 => {
                     let ip = source.read_u32::<BigEndian>()?;
@@ -430,7 +430,8 @@ impl HostList {
 
                     *host = Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip)), port))
                 },
-                _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "Unknown ip address type"))
+                NETCODE_ADDRESS_NONE => {}, // Skip blanks
+                _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "Unknown ip address type")),
             }
         }
 
@@ -611,7 +612,9 @@ fn capi_connect_token<I>(hosts: I, private_key: &[u8; NETCODE_KEY_BYTES], expire
 
     let result = unsafe {
         match capi::netcode_generate_connect_token(host_count,
-            host_list_ptr.as_ptr() as *mut *mut i8,
+            host_list_ptr.as_ptr() as *mut *const i8,
+            host_list_ptr.as_ptr() as *mut *const i8,
+            expire,
             expire,
             client_id,
             protocol,
@@ -633,7 +636,6 @@ fn capi_connect_token<I>(hosts: I, private_key: &[u8; NETCODE_KEY_BYTES], expire
         }
         *host = ::std::ptr::null_mut();
     }
-
     result
 }
 

@@ -8,9 +8,9 @@ use std::time::{Duration};
 
 pub fn main() {
     gcc::Build::new()
-        .file("c/netcode.c")
+        .file("netcode.c")
         .include("c")
-        .include("c/windows")
+        .include("windows")
         .define("NETCODE_ENABLE_TESTS", Some("0"))
         .define("NDEBUG", Some("0"))
         .compile("libnetcode.a");
@@ -20,7 +20,7 @@ pub fn main() {
 
     //Do some basic dependecy management
     let targets = vec!(&private_path);
-    let source = vec!("rust/build.rs", "c/netcode.c", "c/netcode.h").iter()
+    let source = vec!("rust/build.rs", "netcode.c", "netcode.h").iter()
         .map(|v| PathBuf::from(v))
         .collect::<Vec<_>>();
 
@@ -47,11 +47,11 @@ pub fn main() {
     if newest_source > oldest_target {
         let include = env::var("INCLUDE").unwrap_or("".to_string());
         let sodium_include = env::var("SODIUM_LIB_DIR")
-                                 .unwrap_or("c/windows".to_string());
+                                 .unwrap_or("windows".to_string());
 
         let private_bindings = bindgen::Builder::default()
             .no_unstable_rust()
-            .header("c/netcode.c")
+            .header("netcode.c")
             .clang_arg("-Ic")
             .clang_arg(format!("-I{}", sodium_include))
             .clang_arg(format!("-I{}", include))
@@ -65,7 +65,8 @@ pub fn main() {
             .whitelisted_function("free")
             .whitelisted_function("netcode_generate_connect_token")
             .whitelisted_function("netcode_init")
-            .whitelisted_function("netcode_client_create_internal")
+            //.whitelisted_function("netcode_client_create_internal")
+            .whitelisted_function("netcode_client_create")
             .whitelisted_function("netcode_client_connect")
             .whitelisted_function("netcode_client_update")
             .whitelisted_function("netcode_client_state")
