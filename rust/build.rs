@@ -1,13 +1,10 @@
-extern crate gcc;
-extern crate bindgen;
-
 use std::env;
-use std::path::PathBuf;
 use std::fs::File;
-use std::time::{Duration};
+use std::path::PathBuf;
+use std::time::Duration;
 
 pub fn main() {
-    gcc::Build::new()
+    cc::Build::new()
         .file("netcode.c")
         .include("c")
         .include("windows")
@@ -19,12 +16,14 @@ pub fn main() {
     let private_path = out_path.join("private_bindings.rs");
 
     //Do some basic dependecy management
-    let targets = vec!(&private_path);
-    let source = vec!("rust/build.rs", "netcode.c", "netcode.h").iter()
+    let targets = vec![&private_path];
+    let source = vec!["rust/build.rs", "netcode.c", "netcode.h"]
+        .iter()
         .map(|v| PathBuf::from(v))
         .collect::<Vec<_>>();
 
-    let newest_source = source.iter()
+    let newest_source = source
+        .iter()
         .map(|v| {
             File::open(v)
                 .and_then(|f| f.metadata())
@@ -34,7 +33,8 @@ pub fn main() {
         .max()
         .unwrap();
 
-    let oldest_target = targets.iter()
+    let oldest_target = targets
+        .iter()
         .filter_map(|v| {
             File::open(v)
                 .and_then(|f| f.metadata())
@@ -46,58 +46,57 @@ pub fn main() {
 
     if newest_source > oldest_target {
         let include = env::var("INCLUDE").unwrap_or("".to_string());
-        let sodium_include = env::var("SODIUM_LIB_DIR")
-                                 .unwrap_or("windows".to_string());
+        let sodium_include = env::var("SODIUM_LIB_DIR").unwrap_or("windows".to_string());
 
         let private_bindings = bindgen::Builder::default()
-            .no_unstable_rust()
             .header("netcode.c")
             .clang_arg("-Ic")
             .clang_arg(format!("-I{}", sodium_include))
             .clang_arg(format!("-I{}", include))
-            .whitelisted_function("netcode_log_level")
-            .whitelisted_function("netcode_write_packet")
-            .whitelisted_function("netcode_read_packet")
-            .whitelisted_function("netcode_read_connect_token")
-            .whitelisted_function("netcode_decrypt_challenge_token")
-            .whitelisted_function("netcode_read_challenge_token")
-            .whitelisted_function("netcode_replay_protection_reset")
-            .whitelisted_function("free")
-            .whitelisted_function("netcode_generate_connect_token")
-            .whitelisted_function("netcode_init")
-            //.whitelisted_function("netcode_client_create_internal")
-            .whitelisted_function("netcode_client_create")
-            .whitelisted_function("netcode_client_connect")
-            .whitelisted_function("netcode_client_update")
-            .whitelisted_function("netcode_client_state")
-            .whitelisted_function("netcode_client_receive_packet")
-            .whitelisted_function("netcode_client_free_packet")
-            .whitelisted_function("netcode_client_destroy")
-            .whitelisted_function("netcode_client_free_packet")
-            .whitelisted_function("netcode_client_send_packet")
-            .whitelisted_function("netcode_term")
-            .whitelisted_type("netcode_network_simulator_t")
-            .whitelisted_type("netcode_address_t")
-            .whitelisted_function("netcode_network_simulator_create")
-            .whitelisted_function("netcode_network_simulator_destroy")
-            .whitelisted_function("netcode_network_simulator_update")
-            .whitelisted_function("netcode_network_simulator_send_packet")
-            .whitelisted_function("netcode_network_simulator_receive_packets")
-            .whitelisted_function("netcode_parse_address")
-            .whitelisted_function("netcode_address_to_string")
-            .whitelisted_var("NETCODE_MAX_ADDRESS_STRING_LENGTH")
-            .whitelisted_var("NETCODE_CONNECTION_NUM_PACKETS")
-            .whitelisted_var("NETCODE_CLIENT_STATE_CONNECTED")
-            .whitelisted_var("NETCODE_CLIENT_STATE_DISCONNECTED")
-            .whitelisted_var("NETCODE_CLIENT_STATE_SENDING_CONNECTION_RESPONSE")
-            .whitelisted_var("NETCODE_CLIENT_STATE_SENDING_CONNECTION_REQUEST")
-            .whitelisted_var("NETCODE_LOG_LEVEL_DEBUG")
-            .whitelisted_var("NETCODE_PACKET_SEND_RATE")
-            .whitelisted_var("NETCODE_CONNECT_TOKEN_BYTES")
+            .whitelist_function("netcode_log_level")
+            .whitelist_function("netcode_write_packet")
+            .whitelist_function("netcode_read_packet")
+            .whitelist_function("netcode_read_connect_token")
+            .whitelist_function("netcode_decrypt_challenge_token")
+            .whitelist_function("netcode_read_challenge_token")
+            .whitelist_function("netcode_replay_protection_reset")
+            .whitelist_function("free")
+            .whitelist_function("netcode_generate_connect_token")
+            .whitelist_function("netcode_init")
+            //.whitelist_function("netcode_client_create_internal")
+            .whitelist_function("netcode_client_create")
+            .whitelist_function("netcode_client_connect")
+            .whitelist_function("netcode_client_update")
+            .whitelist_function("netcode_client_state")
+            .whitelist_function("netcode_client_receive_packet")
+            .whitelist_function("netcode_client_free_packet")
+            .whitelist_function("netcode_client_destroy")
+            .whitelist_function("netcode_client_free_packet")
+            .whitelist_function("netcode_client_send_packet")
+            .whitelist_function("netcode_term")
+            .whitelist_type("netcode_network_simulator_t")
+            .whitelist_type("netcode_address_t")
+            .whitelist_function("netcode_network_simulator_create")
+            .whitelist_function("netcode_network_simulator_destroy")
+            .whitelist_function("netcode_network_simulator_update")
+            .whitelist_function("netcode_network_simulator_send_packet")
+            .whitelist_function("netcode_network_simulator_receive_packets")
+            .whitelist_function("netcode_parse_address")
+            .whitelist_function("netcode_address_to_string")
+            .whitelist_var("NETCODE_MAX_ADDRESS_STRING_LENGTH")
+            .whitelist_var("NETCODE_CONNECTION_NUM_PACKETS")
+            .whitelist_var("NETCODE_CLIENT_STATE_CONNECTED")
+            .whitelist_var("NETCODE_CLIENT_STATE_DISCONNECTED")
+            .whitelist_var("NETCODE_CLIENT_STATE_SENDING_CONNECTION_RESPONSE")
+            .whitelist_var("NETCODE_CLIENT_STATE_SENDING_CONNECTION_REQUEST")
+            .whitelist_var("NETCODE_LOG_LEVEL_DEBUG")
+            .whitelist_var("NETCODE_PACKET_SEND_RATE")
+            .whitelist_var("NETCODE_CONNECT_TOKEN_BYTES")
             .generate()
             .expect("Unable to generate bindings");
 
-        private_bindings.write_to_file(&private_path)
+        private_bindings
+            .write_to_file(&private_path)
             .expect("Couldn't write bindings!");
     }
 }
