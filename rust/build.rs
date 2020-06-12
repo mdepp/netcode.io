@@ -19,7 +19,7 @@ pub fn main() {
     let targets = vec![&private_path];
     let source = vec!["rust/build.rs", "netcode.c", "netcode.h"]
         .iter()
-        .map(|v| PathBuf::from(v))
+        .map(PathBuf::from)
         .collect::<Vec<_>>();
 
     let newest_source = source
@@ -28,7 +28,7 @@ pub fn main() {
             File::open(v)
                 .and_then(|f| f.metadata())
                 .and_then(|m| m.modified())
-                .expect(format!("Source file {:?} not found", v).as_str())
+                .unwrap_or_else(|_| panic!("Source file {:?} not found", v))
         })
         .max()
         .unwrap();
@@ -45,8 +45,8 @@ pub fn main() {
         .unwrap_or(newest_source - Duration::from_secs(1));
 
     if newest_source > oldest_target {
-        let include = env::var("INCLUDE").unwrap_or("".to_string());
-        let sodium_include = env::var("SODIUM_LIB_DIR").unwrap_or("windows".to_string());
+        let include = env::var("INCLUDE").unwrap_or_else(|_| "".to_string());
+        let sodium_include = env::var("SODIUM_LIB_DIR").unwrap_or_else(|_| "windows".to_string());
 
         let private_bindings = bindgen::Builder::default()
             .header("netcode.c")

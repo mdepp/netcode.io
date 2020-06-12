@@ -135,10 +135,7 @@
 //! let token = server.generate_token(EXPIRE_SECONDS, client_id, None).unwrap();
 //! ```
 
-#![cfg_attr(
-    feature = "cargo-clippy",
-    warn(clippy, clippy_correctness, clippy_style, clippy_pedantic, clippy_perf)
-)]
+#![warn(clippy::all)]
 #![feature(nll, stmt_expr_attributes)]
 #![warn(rust_2018_idioms)]
 
