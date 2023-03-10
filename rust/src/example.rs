@@ -16,6 +16,7 @@
     )
 )]
 #![warn(rust_2018_idioms)]
+#![warn(rust_2021_compatibility)]
 
 use netcode::{
     ClientEvent, ClientState, ServerEvent, UdpClient, UdpServer, NETCODE_MAX_PAYLOAD_SIZE,

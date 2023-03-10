@@ -137,6 +137,7 @@
 
 #![warn(clippy::all)]
 #![warn(rust_2018_idioms)]
+#![warn(rust_2021_compatibility)]
 
 /*
 
