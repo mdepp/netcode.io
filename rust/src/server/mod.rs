@@ -40,7 +40,7 @@ pub type ClientId = u64;
 /// Describes event the server receives when calling `next_event(..)`.
 #[derive(Debug)]
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub enum ServerEvent {
     /// A client has connected, contains a reference to the client that was just created. `out_packet` contains private user data from token.
     ClientConnect(ClientId),
@@ -60,7 +60,7 @@ pub enum ServerEvent {
 
 /// UDP based netcode server.
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub type UdpServer = Server<UdpSocket, ()>;
 
 type ClientVec = Vec<Option<Connection>>;
@@ -251,7 +251,7 @@ where
         }
 
         // TODO: restructure
-        #[cfg_attr(feature = "cargo-clippy", allow(never_loop))]
+        #[cfg_attr(feature = "cargo-clippy", allow(clippy::never_loop))]
         loop {
             let mut scratch = [0; NETCODE_MAX_PACKET_SIZE];
             let result = match self.internal.listen_socket.recv_from(&mut scratch) {
@@ -456,7 +456,7 @@ where
 
                     Ok(None)
                 } else {
-                    self.send_denied_packet(&addr, &private_data.server_to_client_key)?;
+                    self.send_denied_packet(addr, &private_data.server_to_client_key)?;
                     trace!(
                         "Tried to accept new client but max clients connected: {}",
                         clients.len()

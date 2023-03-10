@@ -33,7 +33,7 @@ pub enum State {
 }
 
 // TODO: need to find out why these are 64
-#[cfg_attr(feature = "cargo-clippy", allow(large_enum_variant))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::large_enum_variant))]
 enum InternalState {
     Connecting(usize, ConnectSequence),
     Connected,
@@ -41,7 +41,7 @@ enum InternalState {
 }
 
 // TODO: need to find out why these are 64
-#[cfg_attr(feature = "cargo-clippy", allow(large_enum_variant))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::large_enum_variant))]
 enum ConnectSequence {
     SendingToken,
     SendingChallenge(u64, [u8; NETCODE_CHALLENGE_TOKEN_BYTES]),
@@ -61,7 +61,7 @@ impl Clone for ConnectSequence {
 /// Describes event the server receives when calling `next_event(..)`.
 #[derive(Clone, Debug)]
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub enum ClientEvent {
     /// Client state has changed to `State`.
     NewState(State),
@@ -95,7 +95,7 @@ where
 
 /// UDP based netcode client.
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub type UdpClient = Client<UdpSocket, ()>;
 
 impl<I, S> ClientData<I, S>

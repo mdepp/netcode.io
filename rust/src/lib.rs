@@ -136,7 +136,6 @@
 //! ```
 
 #![warn(clippy::all)]
-#![feature(nll, stmt_expr_attributes)]
 #![warn(rust_2018_idioms)]
 
 /*
@@ -147,7 +146,6 @@
 */
 
 #[cfg(test)]
-#[macro_use]
 #[macro_use]
 #[cfg(test)]
 pub mod capi;

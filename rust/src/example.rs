@@ -7,9 +7,14 @@
 //! terminate when it hears the disconnect from the client.
 #![cfg_attr(
     feature = "cargo-clippy",
-    warn(clippy, clippy_correctness, clippy_style, clippy_pedantic, clippy_perf)
+    warn(
+        clippy::all,
+        clippy::correctness,
+        clippy::style,
+        clippy::pedantic,
+        clippy::perf
+    )
 )]
-#![feature(nll, stmt_expr_attributes)]
 #![warn(rust_2018_idioms)]
 
 use netcode::{
@@ -32,7 +37,8 @@ const TICK_TIME_MS: f64 = 0.016; //Tick every 16ms
 
 //Helper function for sleeping at a regular interval
 fn sleep_for_tick(last_tick: &mut f64) -> f64 {
-    let now = time::precise_time_s();
+    let now =
+        (time::OffsetDateTime::now_utc() - time::OffsetDateTime::unix_epoch()).as_seconds_f64();
 
     let elapsed = (now - *last_tick).min(TICK_TIME_MS);
 
@@ -40,7 +46,7 @@ fn sleep_for_tick(last_tick: &mut f64) -> f64 {
         // TODO: fix me
         #[cfg_attr(
             feature = "cargo-clippy",
-            allow(cast_possible_truncation, cast_sign_loss)
+            allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)
         )]
         let sleep_ms = ((TICK_TIME_MS - elapsed) * 1000.0).floor() as u64;
         thread::sleep(Duration::from_millis(sleep_ms));
@@ -111,7 +117,7 @@ fn main() {
                 match event {
                     ClientEvent::NewState(state) => match state {
                         ClientState::Disconnected => return,
-                        s => println!("Client: new state {:?}", s),
+                        s => println!("Client: new state {s:?}"),
                     },
                     ClientEvent::Packet(len) => {
                         println!("{}", String::from_utf8_lossy(&packet[..len]));
@@ -147,9 +153,8 @@ fn main() {
         if value == "exit" {
             tx.send(value).unwrap();
             break;
-        } else {
-            tx.send(value).unwrap()
         }
+        tx.send(value).unwrap();
     }
 
     client_thread.join().unwrap();

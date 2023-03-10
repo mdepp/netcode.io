@@ -2,7 +2,7 @@ const REPLAY_BUFFER_SIZE: usize = 256;
 const EMPTY_ENTRY: u64 = 0xFFFF_FFFF_FFFF_FFFF;
 
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub struct ReplayProtection {
     most_recent_sequence: u64,
     received_packet: [u64; REPLAY_BUFFER_SIZE],
@@ -26,7 +26,7 @@ impl ReplayProtection {
     }
 
     // TODO: fix me
-    #[cfg_attr(feature = "cargo-clippy", allow(cast_possible_wrap))]
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_wrap))]
     pub fn packet_already_received(&mut self, sequence: u64) -> bool {
         if sequence & (1 << 63) == (1 << 63) {
             return false;
@@ -41,7 +41,7 @@ impl ReplayProtection {
         }
 
         // TODO: fix me
-        #[cfg_attr(feature = "cargo-clippy", allow(cast_possible_truncation))]
+        #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
         let index = sequence as usize % REPLAY_BUFFER_SIZE;
 
         if self.received_packet[index] == EMPTY_ENTRY {

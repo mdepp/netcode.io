@@ -16,7 +16,7 @@ const PACKET_PAYLOAD: u8 = 5;
 const PACKET_DISCONNECT: u8 = 6;
 
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(large_enum_variant))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::large_enum_variant))]
 pub enum Packet {
     ConnectionRequest(ConnectionRequestPacket),
     ConnectionDenied,
@@ -55,11 +55,11 @@ impl Packet {
 }
 
 fn decode_prefix(value: u8) -> (u8, usize) {
-    ((value & 0xF) as u8, (value >> 4) as usize)
+    ((value & 0xF), (value >> 4) as usize)
 }
 
 // TODO: fix me
-#[cfg_attr(feature = "cargo-clippy", allow(cast_possible_truncation))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
 fn encode_prefix(value: u8, sequence: u64) -> u8 {
     value | ((sequence_bytes_required(sequence) as u8) << 4)
 }
@@ -79,7 +79,7 @@ fn sequence_bytes_required(sequence: u64) -> usize {
 
 #[derive(Debug)]
 // TODO: fix me
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub enum PacketError {
     InvalidPrivateKey,
     InvalidPacket,
@@ -158,7 +158,7 @@ pub fn decode(
         let sequence = read_sequence(source, sequence_len)?;
 
         // TODO: fix me
-        #[cfg_attr(feature = "cargo-clippy", allow(cast_possible_truncation))]
+        #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
         let payload = &data[source.position() as usize..];
         let additional_data = get_additional_data(prefix_byte, protocol_id)?;
 
@@ -179,7 +179,7 @@ pub fn decode(
             PACKET_KEEPALIVE => Ok(Packet::KeepAlive(KeepAlivePacket::read(source_data)?)),
             PACKET_PAYLOAD => Ok(Packet::Payload(decoded_len)),
             PACKET_DISCONNECT => Ok(Packet::Disconnect),
-            PACKET_CONNECTION | _ => Err(PacketError::InvalidPacket),
+            _ => Err(PacketError::InvalidPacket),
         };
 
         packet.map(|p| (sequence, p))
@@ -199,18 +199,18 @@ pub fn encode(
         let mut writer = io::Cursor::new(&mut out[..]);
 
         //First byte is always id + sequence
-        writer.write_u8(encode_prefix(packet.get_type_id() as u8, 0))?;
+        writer.write_u8(encode_prefix(packet.get_type_id(), 0))?;
         req.write(&mut writer)?;
 
         // TODO: fix me
-        #[cfg_attr(feature = "cargo-clippy", allow(cast_possible_truncation))]
+        #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
         Ok(writer.position() as usize)
     } else if let Some((sequence, private_key)) = crypt_info {
         let (prefix_byte, offset) = {
             let write = &mut io::Cursor::new(&mut out[..]);
 
             //First byte is always id + sequence
-            let prefix_byte = encode_prefix(packet.get_type_id() as u8, sequence);
+            let prefix_byte = encode_prefix(packet.get_type_id(), sequence);
             write.write_u8(prefix_byte)?;
             write_sequence(write, sequence)?;
 
@@ -232,7 +232,7 @@ pub fn encode(
         let additional_data = get_additional_data(prefix_byte, protocol_id)?;
 
         // TODO: fix me
-        #[cfg_attr(feature = "cargo-clippy", allow(cast_possible_truncation))]
+        #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
         let crypt_write = crypto::encode(
             &mut out[offset as usize..],
             &scratch[..scratch_written as usize],
@@ -242,7 +242,7 @@ pub fn encode(
         )?;
 
         // TODO: fix me
-        #[cfg_attr(feature = "cargo-clippy", allow(cast_possible_truncation))]
+        #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
         Ok(offset as usize + crypt_write)
     } else {
         Err(PacketError::InvalidPrivateKey)
@@ -250,7 +250,7 @@ pub fn encode(
 }
 
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub struct ConnectionRequestPacket {
     pub version: [u8; NETCODE_VERSION_LEN],
     pub protocol_id: u64,
@@ -357,7 +357,7 @@ impl ChallengeToken {
     }
 }
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 
 pub struct ChallengePacket {
     pub token_sequence: u64,
@@ -451,7 +451,7 @@ impl ChallengePacket {
 }
 
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub struct ResponsePacket {
     pub token_sequence: u64,
     pub token_data: [u8; NETCODE_CHALLENGE_TOKEN_BYTES],
@@ -500,7 +500,7 @@ impl ResponsePacket {
 }
 
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub struct KeepAlivePacket {
     pub client_idx: i32,
     pub max_clients: i32,

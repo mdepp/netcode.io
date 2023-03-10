@@ -61,7 +61,7 @@ const NETCODE_ADDITIONAL_DATA_SIZE: usize = NETCODE_VERSION_LEN + 8 + 8;
 
 /// Token used by clients to connect and authenticate to a netcode `Server`
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub struct ConnectToken {
     /// Protocol ID for messages relayed by netcode.
     pub protocol: u64,
@@ -536,7 +536,7 @@ impl HostList {
         W: io::Write,
     {
         // TODO: fix me
-        #[cfg_attr(feature = "cargo-clippy", allow(cast_possible_truncation))]
+        #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
         out.write_u32::<LittleEndian>(self.get().len() as u32)?;
         for host in self.get() {
             match host {

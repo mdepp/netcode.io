@@ -131,7 +131,7 @@ impl Channel {
     // TODO: fix me
     #[cfg_attr(
         feature = "cargo-clippy",
-        allow(cast_possible_wrap, cast_possible_truncation)
+        allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)
     )]
     pub fn send_keep_alive<I, S>(
         &mut self,

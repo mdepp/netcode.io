@@ -1,13 +1,10 @@
-use libsodium_sys;
-
 use crate::common::*;
 use byteorder::{LittleEndian, WriteBytesExt};
 use std::io;
 use std::sync::atomic;
 
 // TODO: fix me
-#[cfg_attr(feature = "cargo-clippy", allow(replace_consts))]
-static mut SODIUM_INIT: atomic::AtomicUsize = atomic::ATOMIC_USIZE_INIT;
+static mut SODIUM_INIT: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
 
 pub const NETCODE_ENCRYPT_EXTA_BYTES: usize =
     libsodium_sys::crypto_aead_chacha20poly1305_ABYTES as usize;
@@ -52,7 +49,7 @@ pub fn random_bytes(out: &mut [u8]) {
 }
 
 // TODO: fix me
-#[cfg_attr(feature = "cargo-clippy", allow(cast_possible_truncation))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
 pub fn encode(
     out: &mut [u8],
     data: &[u8],
@@ -97,7 +94,7 @@ pub fn encode(
 }
 
 // TODO: fix me
-#[cfg_attr(feature = "cargo-clippy", allow(cast_possible_truncation))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
 pub fn decode(
     out: &mut [u8],
     data: &[u8],

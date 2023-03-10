@@ -4,7 +4,7 @@ use crate::server;
 /// Current state of the client connection.
 #[derive(Clone, Debug)]
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub enum ConnectionState {
     /// We've recieved the initial packet but response is outstanding yet.
     PendingResponse,

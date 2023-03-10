@@ -3,7 +3,7 @@ use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
 
 // TODO: fix this
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::module_name_repetitions))]
 pub trait SocketProvider<I, S> {
     fn new_state() -> S;
     fn bind(addr: &SocketAddr, state: &mut S) -> Result<I, io::Error>;
@@ -14,9 +14,7 @@ pub trait SocketProvider<I, S> {
 }
 
 impl SocketProvider<UdpSocket, ()> for UdpSocket {
-    fn new_state() -> () {
-        ()
-    }
+    fn new_state() {}
 
     fn bind(addr: &SocketAddr, _state: &mut ()) -> Result<Self, io::Error> {
         let socket = Self::bind(addr)?;
